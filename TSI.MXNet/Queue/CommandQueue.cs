@@ -35,11 +35,19 @@ namespace TSI.FourSeries.CommandQueue
             }
         }
 
-        private int GetQueueCount()
+        public void ProcessQueueEvent()
         {
-            return CommandQueueObj.Count;
-        }
+            if (CommandQueueObj.Count > 0)
+            {
+                ProcessQueueEventArgs args = new ProcessQueueEventArgs()
+                {
+                    cmd = CommandQueueObj.Dequeue(),
+                };
 
+                ProcessQueueEventCall?.Invoke(this, args);
+            }
+        }
+        
         
     }
 }

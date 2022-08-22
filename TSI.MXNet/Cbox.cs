@@ -30,19 +30,18 @@ namespace TSI.MXNet
             set { _port = value; }
         }
 
-
-
         public CBox()
         {
 
         }
 
-
         public void InitializeClient()
         {
             try
-            {
+            {   //create a queue and add the processqueueventcall eventhandler
                 _queue = new CommandQueue();
+                _queue.ProcessQueueEventCall += q_ProcessQueueEventCall;
+
                 _tcpClient = new SimpleTcpClient(IPAddress, Port);
             }
             catch (Exception ex)
@@ -52,11 +51,15 @@ namespace TSI.MXNet
             }
         }
 
+        private void q_ProcessQueueEventCall(object sender, ProcessQueueEventArgs args)
+        {
+            TCPSendCommand(args.cmd);
+        }
 
         public void QueueCommand(string cmd)
         { 
             _queue.AddCommand(cmd);
-            TCPSendCommand(_queue.ProcessQueue());
+            _queue.ProcessQueueEvent();
         }
         public void TCPSendCommand(string command)
         {
