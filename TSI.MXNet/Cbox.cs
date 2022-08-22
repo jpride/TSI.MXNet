@@ -3,13 +3,15 @@ using Crestron.SimplSharp;
 using System.Net.Sockets;
 using Newtonsoft.Json;
 using TSI.Sockets;
+using TSI.FourSeries.CommandQueue;
 
 namespace TSI.MXNet
 {
     public class CBox
     {
-        //private TcpClient _cboxClient;
+        
         private SimpleTcpClient _tcpClient;
+        private CommandQueue _queue;
 
         private string _ipaddress;
         private ushort _port;
@@ -40,6 +42,7 @@ namespace TSI.MXNet
         {
             try
             {
+                _queue = new CommandQueue();
                 _tcpClient = new SimpleTcpClient(IPAddress, Port);
             }
             catch (Exception ex)
@@ -49,6 +52,12 @@ namespace TSI.MXNet
             }
         }
 
+
+        public void QueueCommand(string cmd)
+        { 
+            _queue.AddCommand(cmd);
+            TCPSendCommand(_queue.ProcessQueue());
+        }
         public void TCPSendCommand(string command)
         {
             if (!_tcpClient.isInitialized)

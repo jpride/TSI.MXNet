@@ -80,6 +80,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Cbox.cs" />
+    <Compile Include="Queue\CommandQueue.cs" />
+    <Compile Include="Queue\EventArgs.cs" />
     <Compile Include="HelperClasses\EventArgs.cs" />
     <Compile Include="HelperClasses\JsonDataObject.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
