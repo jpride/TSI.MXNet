@@ -2,6 +2,7 @@
 using System.Net.Sockets;
 using Crestron.SimplSharp;
 
+
 namespace TSI.Sockets
 {
     public class SimpleTcpClient
@@ -10,8 +11,12 @@ namespace TSI.Sockets
         private ushort _port;
         private int _buffersize = 8048;
         private TcpClient _client;
+        
 
         public bool isInitialized;
+
+        public event EventHandler<EventArgs> ClientConnected;
+        public event EventHandler<EventArgs> ClientDisconnected;
 
         public string IPAddress
         {
@@ -25,49 +30,51 @@ namespace TSI.Sockets
             set { _port = value; }
         }
 
-
         public SimpleTcpClient(string ipaddress, ushort port)
         { 
             //assign private fields for this class
-            this.IPAddress = ipaddress;
-            this.Port = port;    
+            IPAddress = ipaddress;
+            Port = port;    
 
             //instantiate new client
             _client = new TcpClient(ipaddress, port);
+            _client.ReceiveTimeout = 3000;
 
             //set isInitialized var to true
             isInitialized = true;
             CrestronConsole.PrintLine($"Client Initialized");
         }
 
-
         public string SendCommand(string command)
         {
-            try //this code is taken largely from https://docs.microsoft.com/en-us/dotnet/api/system.net.sockets.tcpclient?view=net-6.0 
+            try
             {
-                /*Pseudo Code
-                 * create a client at ipaddress and port
-                 * convert command string to byte stream
-                 * open netstream on client
-                 * write commandbytes to netstream
-                 * initilize response byte stream buffer
-                 * create empty string for response string
-                 * read bytes of response  on netstream
-                 * convert response bytestream to string
-                 * close netstream and client                 
-                 */
 
-                //create new client
-                _client = new TcpClient(IPAddress, Port);
+                if (_client != null && _client.Client != null)
+                {
+                    if (!_client.Client.Connected)
+                    {
+                        _client.Connect(IPAddress, Port);
+                    }
 
+                    if (_client.Client.Connected)
+                    {
+                        ClientConnected?.Invoke(this, EventArgs.Empty);
+                    }
+
+                }
+                               
                 //convert command to send into Bytestream
-                Byte[] data = System.Text.Encoding.ASCII.GetBytes(command);
+                Byte[] data = System.Text.Encoding.UTF8.GetBytes(command);
+
 
                 //create a network stream
                 NetworkStream ns = _client.GetStream();
 
+
                 //write to network stream
                 ns.Write(data, 0, data.Length);
+
 
                 //Buffer to store the response bytes
                 data = new Byte[_buffersize]; //the size here is important if your device repsonds with hugely variable chunks of text
@@ -75,26 +82,41 @@ namespace TSI.Sockets
                 //define response string
                 String responseData = String.Empty;
 
+ 
                 //read from nework stream
                 Int32 bytes = ns.Read(data, 0, data.Length);
 
+
                 //convert response data bytestream to string
-                responseData = System.Text.Encoding.ASCII.GetString(data, 0, bytes);
+                responseData = System.Text.Encoding.UTF8.GetString(data, 0, bytes);
 
                 //print to console
-                CrestronConsole.PrintLine($"Client Repsonse Data: {responseData}");
-                
+                //CrestronConsole.PrintLine($"Client Repsonse Data: {responseData}");
 
                 //close everything
-                ns.Close();
-                _client.Close();
+                //ns.Close();
 
-                return responseData;    
+                return responseData;
+            }
+            catch (InvalidCastException icEx)
+            {
+                ErrorLog.Error($"Sendcommand: Invalid Cast Exception. {icEx.Source}\n{icEx.InnerException}");
+                return String.Empty;
             }
             catch (Exception ex)
             {
+                ClientDisconnected?.Invoke(this, EventArgs.Empty);
                 ErrorLog.Error($"Error in SendCommand(): {ex.Message}");
                 return String.Empty;
+            }
+        }
+
+        public void DisconnectClient()
+        {
+            _client.Close();
+            if (!_client.Connected)
+            {
+                ClientDisconnected?.Invoke(this, EventArgs.Empty);
             }
         }
 
