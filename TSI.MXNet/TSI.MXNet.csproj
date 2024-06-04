@@ -84,6 +84,7 @@
     <Compile Include="JsonUtilities\CustomResponseConverter.cs" />
     <Compile Include="JsonUtilities\DeviceListResponse.cs" />
     <Compile Include="JsonUtilities\ErrorResponse.cs" />
+    <Compile Include="JsonUtilities\ReportResponse.cs" />
     <Compile Include="JsonUtilities\SimpleInfoResponse.cs" />
     <Compile Include="Queue\CommandQueue.cs" />
     <Compile Include="Queue\EventArgs.cs" />

@@ -6,6 +6,7 @@ using TSI.FourSeries.CommandQueue;
 using System.Collections.Generic;
 using TSI.MXNet.JsonUtilities;
 using System.Text;
+using System.Linq;
 
 
 namespace TSI.MXNet
@@ -85,7 +86,7 @@ namespace TSI.MXNet
 
         private void q_ProcessQueueEventCall(object sender, ProcessQueueEventArgs args)
         {
-            TCPSendCommand(args.cmd);
+            TCPSendCommand(args.cmd);   
         }
 
         public void QueueCommand(string cmd)
@@ -106,8 +107,27 @@ namespace TSI.MXNet
         }
 
         //can be used from Simpl+ without utilizing the client
+
+        public string[] SplitResponse(string response)
+        {
+            string[] rspArray = response.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            int i = 0;
+            foreach(string s in rspArray)
+            {
+                CrestronConsole.PrintLine($"Split Rsp: {i}:{s}");
+                i++;
+            }
+
+            return rspArray;
+        }
         public void ParseResponse(string response)
         {
+            //CrestronConsole.PrintLine($"response from cbox: {response}");
+
+            string[] rsp = SplitResponse(response);
+            CrestronConsole.PrintLine($"rspArray Size: {rsp.Length}");
+
             try
             {
                 JsonSerializerSettings settings = new JsonSerializerSettings
@@ -119,6 +139,7 @@ namespace TSI.MXNet
                 BaseResponse deviceListResponse = JsonConvert.DeserializeObject<BaseResponse>(response, settings);
                 BaseResponse simpleInfoResponse = JsonConvert.DeserializeObject<BaseResponse>(response, settings);
                 BaseResponse errorResponse = JsonConvert.DeserializeObject<BaseResponse>(response,settings);
+                BaseResponse reportResponse = JsonConvert.DeserializeObject<BaseResponse>(response, settings);
 
                 if (deviceListResponse is DeviceListResponse detailedResponse)
                 {
@@ -147,6 +168,11 @@ namespace TSI.MXNet
                             _encoderStrings.Add(device.Id);
                         }
                     }
+
+                    _encoders = _encoders.OrderBy(d => d.Id).ToList();
+                    _decoders = _decoders.OrderBy(d => d.Id).ToList();
+                    _encoderStrings.Sort();
+                    _decoderStrings.Sort();
 
                     args.encoders = _encoderStrings.ToArray();
                     args.decoders = _decoderStrings.ToArray();
@@ -184,8 +210,20 @@ namespace TSI.MXNet
 
                     ResponseErrorEvent?.Invoke(this, args);
                 }
+
+                else if (reportResponse is ReportResponse reportRsp)
+                {
+                    CrestronConsole.PrintLine($"*******Report Response*******\n");
+                    CrestronConsole.PrintLine($"Info: {reportRsp.Info}");
+                    CrestronConsole.PrintLine($"Code: {reportRsp.Id}");
+                    CrestronConsole.PrintLine($"Code: {reportRsp.Source}");
+                    CrestronConsole.PrintLine($"Code: {reportRsp.Code}");
+                    CrestronConsole.PrintLine($"Code: {reportRsp.Mac}");
+                }
+
                 else
                 {
+                    CrestronConsole.PrintLine(response);
                     CrestronConsole.PrintLine("Response not matched to monitored pattern");
                 }
 
@@ -229,13 +267,17 @@ namespace TSI.MXNet
         public void Switch(string type,ushort sourceIndex, ushort destIndex)
         {
             try
-            {
-                if (sourceIndex < _encoders.Count && destIndex < _decoders.Count)
+            {              
+                if (sourceIndex == 0 && (destIndex - 1) < _decoders.Count)
                 {
-                    string cmd = $"matrix aset :{type} {_encoders[sourceIndex].Id} {_decoders[destIndex].Id}\n";
+                    string cmd = $"config set device videopathdisable {_decoders[destIndex - 1].Id}\n";
                     QueueCommand(cmd);
                 }
-               
+                else if ((sourceIndex - 1) <= _encoders.Count && (destIndex - 1) <= _decoders.Count)               
+                {
+                    string cmd = $"matrix aset :{type} {_encoders[sourceIndex - 1].Id} {_decoders[destIndex - 1].Id}\n";
+                    QueueCommand(cmd);
+                }
             }
             catch (Exception ex)
             {
