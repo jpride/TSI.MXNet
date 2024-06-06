@@ -3,7 +3,7 @@
 namespace TSI.MXNet.JsonUtilities
 {
  
-    public class ReportResponse : BaseResponse
+    public class DetailedInfoReportResponse : BaseResponse
     {
         [JsonProperty("source")]
         public string Source { get; set; }

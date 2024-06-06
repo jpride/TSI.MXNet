@@ -67,14 +67,11 @@ namespace TSI.Sockets
                 //convert command to send into Bytestream
                 Byte[] data = System.Text.Encoding.UTF8.GetBytes(command);
 
-
                 //create a network stream
                 NetworkStream ns = _client.GetStream();
 
-
                 //write to network stream
                 ns.Write(data, 0, data.Length);
-
 
                 //Buffer to store the response bytes
                 data = new Byte[_buffersize]; //the size here is important if your device repsonds with hugely variable chunks of text
@@ -82,16 +79,11 @@ namespace TSI.Sockets
                 //define response string
                 String responseData = String.Empty;
 
- 
                 //read from nework stream
                 Int32 bytes = ns.Read(data, 0, data.Length);
 
-
                 //convert response data bytestream to string
                 responseData = System.Text.Encoding.UTF8.GetString(data, 0, bytes);
-
-                //print to console
-                //CrestronConsole.PrintLine($"Client Repsonse Data: {responseData}");
 
                 //close everything
                 //ns.Close();

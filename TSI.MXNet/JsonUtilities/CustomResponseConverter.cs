@@ -26,9 +26,9 @@ namespace TSI.MXNet.JsonUtilities
                 response = new DeviceListResponse();
             }
 
-            else if (jsonObject["source"] is JObject)
+            else if (jsonObject["info"] != null && jsonObject["source"] != null && jsonObject["code"] != null)
             {
-                response = new ReportResponse();
+                response = new DetailedInfoReportResponse();
             }
             else //simple repsonse
             {

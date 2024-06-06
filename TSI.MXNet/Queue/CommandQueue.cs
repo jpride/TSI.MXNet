@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Crestron.SimplSharp;
+using System;
 using System.Collections.Generic;
+using System.Threading;
 
 
 
@@ -46,12 +48,15 @@ namespace TSI.FourSeries.CommandQueue
                 //interate thru queue and fire event for each entry, event is handled by cbox class 
                 foreach(var item in queueCopy) 
                 {
+                    //CrestronConsole.PrintLine($"Processing Queue: {item}");
+
                     ProcessQueueEventArgs args = new ProcessQueueEventArgs()
                     {
                         cmd = item
                     };
 
                     ProcessQueueEventCall?.Invoke(this, args);
+                    Thread.Sleep(200);
                 }
             }
         }
