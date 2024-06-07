@@ -80,17 +80,14 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Cbox.cs" />
-    <Compile Include="JsonUtilities\BaseResponse.cs" />
-    <Compile Include="JsonUtilities\CustomResponseConverter.cs" />
-    <Compile Include="JsonUtilities\DeviceListResponse.cs" />
-    <Compile Include="JsonUtilities\ErrorResponse.cs" />
-    <Compile Include="JsonUtilities\DetailedInfoReportResponse.cs" />
-    <Compile Include="JsonUtilities\SimpleInfoResponse.cs" />
-    <Compile Include="Queue\CommandQueue.cs" />
-    <Compile Include="Queue\EventArgs.cs" />
+    <Compile Include="JsonResponse\BaseResponse.cs" />
+    <Compile Include="JsonResponse\CustomResponseConverter.cs" />
+    <Compile Include="JsonResponse\DeviceListResponse.cs" />
+    <Compile Include="JsonResponse\ErrorResponse.cs" />
+    <Compile Include="JsonResponse\DetailedInfoReportResponse.cs" />
+    <Compile Include="JsonResponse\SimpleInfoResponse.cs" />
     <Compile Include="EventArgs\EventArgs.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="UtilityClasses\TCPClient.cs" />
     <Compile Include="UtilityClasses\TcpClientAsync.cs" />
   </ItemGroup>
   <ItemGroup>

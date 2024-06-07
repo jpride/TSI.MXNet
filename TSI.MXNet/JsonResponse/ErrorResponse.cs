@@ -1,7 +1,7 @@
 ﻿using Newtonsoft.Json;
 
 
-namespace TSI.MXNet.JsonUtilities
+namespace TSI.MXNet.JsonResponses
 {
     public class ErrorResponse : BaseResponse
     {

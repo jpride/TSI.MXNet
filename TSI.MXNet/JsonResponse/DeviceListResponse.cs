@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace TSI.MXNet.JsonUtilities
+namespace TSI.MXNet.JsonResponses
 {
 
 

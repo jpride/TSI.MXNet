@@ -1,11 +1,8 @@
 ﻿using System;
 using Crestron.SimplSharp;
 using Newtonsoft.Json;
-using TSI.Sockets;
-using TSI.FourSeries.CommandQueue;
 using System.Collections.Generic;
-using TSI.MXNet.JsonUtilities;
-using System.Text;
+using TSI.MXNet.JsonResponses;
 using System.Linq;
 using TcpClientLibrary;
 
@@ -25,6 +22,7 @@ namespace TSI.MXNet
         public List<string> _decoderStrings = new List<string>();
         public List<string> _encoderStrings = new List<string>();
 
+        private ushort _useRouting;
         public List<ushort> _routes = new List<ushort>();
 
         public event EventHandler<ResponseErrorEventArgs> ResponseErrorEvent;
@@ -44,8 +42,6 @@ namespace TSI.MXNet
             get { return _port; }
             set { _port = value; }
         }
-
-        private ushort _useRouting;
 
         public ushort UseRouting
         {
