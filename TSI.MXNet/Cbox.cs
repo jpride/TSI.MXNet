@@ -14,9 +14,7 @@ namespace TSI.MXNet
 {
     public class CBox
     {
-        
-        private SimpleTcpClient _tcpClient;
-        private CommandQueue _queue;
+        private TcpClientExample _asyncClient;
 
         private string _ipaddress;
         private ushort _port;
@@ -32,9 +30,7 @@ namespace TSI.MXNet
         public event EventHandler<ResponseErrorEventArgs> ResponseErrorEvent;
         public event EventHandler<rs232ResponseEventArgs> Rs232ResponseEvent;
         public event EventHandler<DeviceListUpdateEventArgs> DeviceListUpdateEvent;
-        public event EventHandler<GeneralInfoEventArgs> GeneralResponseEvent;
-        public event EventHandler<EventArgs> ClientConnectedEvent;
-        public event EventHandler<EventArgs> ClientDisconnectedEvent;
+        public event EventHandler<SimpleResponseEventArgs> SimpleResponseEvent;
         public event EventHandler<RouteEventArgs> RouteEvent;
 
         public string IPAddress
@@ -49,22 +45,25 @@ namespace TSI.MXNet
             set { _port = value; }
         }
 
+        private ushort _useRouting;
+
+        public ushort UseRouting
+        {
+            get { return _useRouting; }
+            set { _useRouting = value; }
+        }
+
         public CBox()
         {
 
         }
 
-
         public void InitializeClient()
         {
             try
-            {   //create a queue and add the processqueueventcall eventhandler
-                _queue = new CommandQueue();
-                _queue.ProcessQueueEventCall += q_ProcessQueueEventCall;
-
-                _tcpClient = new SimpleTcpClient(IPAddress, Port);
-                _tcpClient.ClientConnected += OnClientConnected;
-                _tcpClient.ClientDisconnected += OnClientDisconnected;
+            {  
+                _asyncClient = new TcpClientExample(IPAddress, Port);
+                _asyncClient.ResponseReceived += Client_ResponseReceived;
             }
             catch (Exception ex)
             {
@@ -73,39 +72,15 @@ namespace TSI.MXNet
             }
         }
 
-        private void OnClientDisconnected(object sender, EventArgs e)
+        private void Client_ResponseReceived(object sender, string response)
         {
-            CrestronConsole.PrintLine($"Client Disconnected");
-            ClientDisconnectedEvent?.Invoke(this, e);
-        }
-
-        public void OnClientConnected(object sender, EventArgs e)
-        {
-            CrestronConsole.PrintLine($"Client Connected");
-            ClientConnectedEvent?.Invoke(this, e);
-        }
-
-        private void q_ProcessQueueEventCall(object sender, ProcessQueueEventArgs args)
-        {
-            TCPSendCommand(args.cmd);   
+            Console.WriteLine("Received: " + response);
+            SplitResponse(response);
         }
 
         public void QueueCommand(string cmd)
         { 
-            _queue.AddCommand(cmd);
-            _queue.ProcessQueueEvent();
-        }
-
-        public void TCPSendCommand(string command)
-        {
-            if (!_tcpClient.isInitialized)
-            { 
-                InitializeClient(); 
-            }
-
-            string response = _tcpClient.SendCommand(command);
-            //ParseResponse(response ?? String.Empty);
-            SplitResponse(response ?? String.Empty);
+            _asyncClient.QueueCommand(cmd);
         }
 
         public void SplitResponse(string response)
@@ -115,7 +90,7 @@ namespace TSI.MXNet
             int i = 0;
             foreach(string s in rspArray)
             {
-                CrestronConsole.PrintLine($"Split Rsp: {i}:{s}");
+                //CrestronConsole.PrintLine($"Split Rsp: {i}:{s}");
                 i++;
 
                 ParseResponse(s);
@@ -124,6 +99,7 @@ namespace TSI.MXNet
         
         public void ParseResponse(string response)
         {
+            
             try
             {
                 JsonSerializerSettings settings = new JsonSerializerSettings
@@ -182,22 +158,23 @@ namespace TSI.MXNet
 
                 else if (simpleInfoResponse is SimpleInfoResponse simpleResponse)
                 {
-                    CrestronConsole.PrintLine($"*******Simple Response*******\n");
-                    CrestronConsole.PrintLine($"Cmd: {simpleResponse.Cmd}");
-                    CrestronConsole.PrintLine($"Info: {simpleResponse.Info}");
-                    CrestronConsole.PrintLine($"Code: {simpleResponse.Code}");
+                    SimpleResponseEventArgs args = new SimpleResponseEventArgs
+                    { 
+                        cmd = simpleResponse.Cmd,
+                        info = simpleResponse.Info,
+                        code = (int)simpleResponse.Code
+                    };
 
-                    ParseRouteResponse(simpleResponse.Cmd);
+                    SimpleResponseEvent?.Invoke(this, args);
 
+                    if ((simpleResponse.Cmd.Contains("matrix aset") || simpleResponse.Cmd.Contains("config set device videopathdisable")) && (UseRouting == 1))
+                    {
+                        ParseRouteResponse(simpleResponse.Cmd);
+                    }                  
                 }
 
                 else if (errorResponse is ErrorResponse errorRsp)
                 {
-                    CrestronConsole.PrintLine($"*******Error Response*******\n");
-                    CrestronConsole.PrintLine($"Error: {errorRsp.Error}");
-                    CrestronConsole.PrintLine($"Commmand: {errorRsp.Cmd}");
-                    CrestronConsole.PrintLine($"Code: {errorRsp.Code}");
-
                     ResponseErrorEventArgs args = new ResponseErrorEventArgs
                     {
                         error = errorRsp.Error,
@@ -210,17 +187,20 @@ namespace TSI.MXNet
 
                 else if (detailedInfoReportResponse is DetailedInfoReportResponse reportRsp)
                 {
-                    CrestronConsole.PrintLine($"*******Report Response*******\n");
-                    CrestronConsole.PrintLine($"Info: {reportRsp.Info}");
-                    CrestronConsole.PrintLine($"Id: {reportRsp.Id}");
-                    CrestronConsole.PrintLine($"Source: {reportRsp.Source}");
-                    CrestronConsole.PrintLine($"Code: {reportRsp.Code}");
-                    CrestronConsole.PrintLine($"Mac: {reportRsp.Mac}");
+                    SimpleResponseEventArgs args = new SimpleResponseEventArgs
+                    { 
+                        cmd = reportRsp.Cmd,
+                        info = reportRsp.Info,
+                        code = (ushort)reportRsp.Code,
+                        id = reportRsp.Id,
+                        
+                    };
+
+                    SimpleResponseEvent?.Invoke(this, args);
                 }
 
                 else
                 {
-                    //CrestronConsole.PrintLine(response);
                     CrestronConsole.PrintLine("Response not matched to monitored pattern");
                 }
 
@@ -237,7 +217,7 @@ namespace TSI.MXNet
         }
 
         public void ParseRouteResponse(string rsp)
-        {
+        {   
             if (rsp.Contains("matrix aset"))
             {
                 string[] rspCmd = rsp.Split(' ');
@@ -262,7 +242,7 @@ namespace TSI.MXNet
             {
                 string[] rspCmd = rsp.Split(' ');
                 string dec = rspCmd[4];
-               
+
                 ushort decIndex = (ushort)_decoders.FindIndex(x => x.Id == dec);
                 ushort encIndex = 99;
 
@@ -284,7 +264,7 @@ namespace TSI.MXNet
             {              
                 if (sourceIndex == 0 && (destIndex - 1) < _decoders.Count)
                 {
-                    string cmd = $"config set device videopathdisable {_decoders[destIndex - 1].Id}\n";
+                    string cmd = $"c s d videopathdisable {_decoders[destIndex - 1].Id}\n";
                     QueueCommand(cmd);
                 }
                 else if ((sourceIndex - 1) <= _encoders.Count && (destIndex - 1) <= _decoders.Count)               

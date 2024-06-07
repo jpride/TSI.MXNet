@@ -20,9 +20,12 @@ namespace TSI.MXNet
         
     }
 
-    public class GeneralInfoEventArgs : DataResponseBaseEventArgs
-    { 
-        
+    public class SimpleResponseEventArgs : DataResponseBaseEventArgs
+    {
+        public string info { get; set; }
+        public string cmd { get; set; }
+        public int code { get; set; }
+        public string source { get; set; }
     }
 
 

@@ -38,7 +38,7 @@ namespace TcpClientLibrary
                 {
                     byte[] data = Encoding.UTF8.GetBytes(command + Environment.NewLine);
                     await _stream.WriteAsync(data, 0, data.Length, _cancellationTokenSource.Token);
-                    await Task.Delay(200); // 200 milliseconds delay between messages
+                    await Task.Delay(400); // 200 milliseconds delay between messages
                 }
                 else
                 {
@@ -49,7 +49,7 @@ namespace TcpClientLibrary
 
         private async void StartReceivingResponses()
         {
-            byte[] buffer = new byte[1024];
+            byte[] buffer = new byte[65535];
             while (!_cancellationTokenSource.Token.IsCancellationRequested)
             {
                 if (_stream.DataAvailable)
