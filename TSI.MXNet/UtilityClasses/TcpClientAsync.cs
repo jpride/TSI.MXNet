@@ -14,6 +14,9 @@ namespace TcpClientLibrary
         private readonly ConcurrentQueue<string> _commandQueue;
         private readonly CancellationTokenSource _cancellationTokenSource;
 
+        public event EventHandler<string> ResponseReceived;
+
+
         public TcpClientExample(string ipAddress, int port)
         {
             _client = new TcpClient();
@@ -70,7 +73,7 @@ namespace TcpClientLibrary
             ResponseReceived?.Invoke(this, response);
         }
 
-        public event EventHandler<string> ResponseReceived;
+
 
         public void Stop()
         {
