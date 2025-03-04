@@ -41,6 +41,8 @@ namespace TSI.MXNet
     {
         public ushort destIndex { get; set; }
         public ushort sourceIndex { get; set; }
+        public string streamSource { get; set; }
+        public ushort streamOn { get; set; }
 
     }
 }

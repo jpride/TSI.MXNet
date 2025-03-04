@@ -5,35 +5,29 @@ using System.Collections.Generic;
 using TSI.MXNet.JsonResponses;
 using System.Linq;
 using TcpClientLibrary;
-using System.Linq.Expressions;
-using System.Configuration;
+using TSI.MXNet.UtilityClasses;
 
 
 namespace TSI.MXNet
 {
     public class CBox
     {
+        private bool _debug;
+
         private TcpClientExample _asyncClient;
 
         private string _ipaddress;
         private ushort _port;
 
-        private List<Device> _decoders = new List<Device>();
-        private List<Device> _encoders = new List<Device>();
-
-        public List<string> _decoderStrings = new List<string>();
-        public List<string> _encoderStrings = new List<string>();
-
-        private ushort _useRouting;
-        private bool _listsPopulated;
-        public List<ushort> _routes = new List<ushort>();
+        public List<MxnetDecoder> mxnetDecoders = new List<MxnetDecoder>();
+        public List<MxnetEncoder> mxnetEncoders = new List<MxnetEncoder>();
 
         public event EventHandler<ResponseErrorEventArgs> ResponseErrorEvent;
         public event EventHandler<rs232ResponseEventArgs> Rs232ResponseEvent;
         public event EventHandler<DeviceListUpdateEventArgs> DeviceListUpdateEvent;
         public event EventHandler<SimpleResponseEventArgs> SimpleResponseEvent;
         public event EventHandler<RouteEventArgs> RouteEvent;
-        
+
 
         public string IPAddress
         {
@@ -47,11 +41,11 @@ namespace TSI.MXNet
             set { _port = value; }
         }
 
-        public ushort UseRouting
+        public ushort Debug
         {
-            get { return _useRouting; }
-            set { _useRouting = value; }
+            set { _debug = value == 1; }
         }
+
 
         public CBox()
         {
@@ -61,15 +55,14 @@ namespace TSI.MXNet
         public void InitializeClient()
         {
             try
-            {  
+            {
                 _asyncClient = new TcpClientExample(IPAddress, Port);
                 _asyncClient.ResponseReceived += Client_ResponseReceived;
-                
             }
             catch (Exception ex)
             {
-                CrestronConsole.PrintLine($"Error in InitializeClient - {ex.Message}");
-                CrestronConsole.PrintLine($"Error in InitializeClient - {ex.StackTrace}");
+                DebugUtility.DebugPrint(_debug, $"Error in InitializeClient - {ex.Message}");
+                DebugUtility.DebugPrint(_debug, $"Error in InitializeClient - {ex.StackTrace}");
             }
         }
 
@@ -80,38 +73,33 @@ namespace TSI.MXNet
         }
 
         public void QueueCommand(string cmd)
-        { 
+        {
             _asyncClient.QueueCommand(cmd);
         }
 
         public void SplitResponse(string response)
         {
-            CrestronConsole.PrintLine($"SplitResponse: {response}");
 
             string[] rspArray = response.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
             try
             {
-                int i = 0;
                 foreach (string s in rspArray)
                 {
-                    CrestronConsole.PrintLine($"Split Rsp: {i}:{s}");
-                    i++;
-
                     ParseResponse(s);
                 }
             }
             catch (Exception e)
             {
-                CrestronConsole.PrintLine($"Exception in SplitResponse: {e.Message}\n");
-                CrestronConsole.PrintLine($"{e.StackTrace}\n");
+                DebugUtility.DebugPrint(_debug, $"Exception in SplitResponse: {e.Message}\n");
+                DebugUtility.DebugPrint(_debug, $"{e.StackTrace}\n");
             }
 
         }
-        
+
         public void ParseResponse(string response)
         {
-            
+
             try
             {
                 JsonSerializerSettings settings = new JsonSerializerSettings
@@ -131,12 +119,8 @@ namespace TSI.MXNet
 
                     DeviceListUpdateEventArgs args = new DeviceListUpdateEventArgs();
 
-                    _decoders.Clear();
-                    _encoders.Clear();
-                    _encoderStrings.Clear();
-                    _decoderStrings.Clear();
-
-                    //_routes[0] = 0;
+                    mxnetDecoders.Clear();
+                    mxnetEncoders.Clear();
 
                     foreach (var kvp in detailedResponse.Info)
                     {
@@ -145,30 +129,51 @@ namespace TSI.MXNet
 
                         if (device.Modelname == "AC-MXNET-1G-R")
                         {
-                            _decoders.Add(device);
-                            _decoderStrings.Add(device.Id);
-                            _routes.Add(0);
+                            MxnetDecoder d = new MxnetDecoder
+                            {
+                                id = device.Id,
+                                ip = device.Ip,
+                                mac = device.Mac,
+                                modelname = device.Modelname,
+                            };
+
+                            mxnetDecoders.Add(d);
                         }
                         else if (device.Modelname == "AC-MXNET-1G-T")
                         {
-                            _encoders.Add(device);
-                            _encoderStrings.Add(device.Id);
+                            MxnetEncoder e = new MxnetEncoder
+                            {
+                                id = device.Id,
+                                ip = device.Ip,
+                                mac = device.Mac,
+                                modelname = device.Modelname
+                            };
+
+                            mxnetEncoders.Add(e);
                         }
                     }
 
-                    _encoders = _encoders.OrderBy(d => d.Id).ToList();
-                    _decoders = _decoders.OrderBy(d => d.Id).ToList();
+                    mxnetDecoders = mxnetDecoders.OrderBy(d => d.id).ToList(); //Devices must be named with "01Decoder, 02 Decoder..."
+                    mxnetEncoders = mxnetEncoders.OrderBy(d => d.id).ToList();
 
-                    _encoderStrings.Sort();
-                    _decoderStrings.Sort();
+                    List<string> _encIdStrings = new List<string>();
+                    foreach (MxnetEncoder e in mxnetEncoders)
+                    {
+                        _encIdStrings.Add(e.id);
+                    }
 
-                    args.encoders = _encoderStrings.ToArray();
-                    args.decoders = _decoderStrings.ToArray();
+                    List<string> _decIdStrings = new List<string>();
+                    foreach (MxnetDecoder d in mxnetDecoders)
+                    {
+                        _decIdStrings.Add(d.id);
+                    }
 
-                    args.decoderCount = (ushort)args.decoders.Length;
-                    args.encoderCount = (ushort)args.encoders.Length;
+                    args.encoders = _encIdStrings.ToArray();
+                    args.decoders = _decIdStrings.ToArray();
 
-                    _listsPopulated = true;
+                    args.encoderCount = (ushort)_encIdStrings.Count;
+                    args.decoderCount = (ushort)_decIdStrings.Count;
+
                     DeviceListUpdateEvent?.Invoke(this, args);
 
                 }
@@ -176,7 +181,7 @@ namespace TSI.MXNet
                 else if (simpleInfoResponse is SimpleInfoResponse simpleResponse)
                 {
                     SimpleResponseEventArgs args = new SimpleResponseEventArgs
-                    { 
+                    {
                         cmd = simpleResponse.Cmd,
                         info = simpleResponse.Info,
                         code = (ushort)simpleResponse.Code
@@ -184,12 +189,12 @@ namespace TSI.MXNet
 
                     SimpleResponseEvent?.Invoke(this, args);
 
-                    CrestronConsole.PrintLine($"SimpleResponse Cmd: {simpleResponse.Cmd}");
+                    DebugUtility.DebugPrint(_debug, $"SimpleResponse Cmd: {simpleResponse.Cmd}");
 
-                    if ((simpleResponse.Cmd.Contains("matrix aset") || simpleResponse.Cmd.Contains("config set device videopathdisable")) && ((UseRouting == 1) && _listsPopulated))
+                    if ((simpleResponse.Cmd.Contains("matrix aset") || simpleResponse.Cmd.Contains("config set device videopathdisable")))
                     {
                         ParseRouteResponse(simpleResponse.Cmd);
-                    }                  
+                    }
                 }
 
                 else if (errorResponse is ErrorResponse errorRsp)
@@ -207,12 +212,12 @@ namespace TSI.MXNet
                 else if (detailedInfoReportResponse is DetailedInfoReportResponse reportRsp)
                 {
                     SimpleResponseEventArgs args = new SimpleResponseEventArgs
-                    { 
+                    {
                         cmd = reportRsp.Cmd,
                         info = reportRsp.Info,
                         code = (ushort)reportRsp.Code,
                         id = reportRsp.Id,
-                        
+
                     };
 
                     SimpleResponseEvent?.Invoke(this, args);
@@ -220,25 +225,23 @@ namespace TSI.MXNet
 
                 else
                 {
-                    CrestronConsole.PrintLine("Response not matched to monitored pattern");
+                    DebugUtility.DebugPrint(_debug, "Response not matched to monitored pattern");
                 }
 
             }
             catch (JsonSerializationException jse)
             {
-                CrestronConsole.PrintLine($"Cannot Deserialize JSON Object. Error: {jse.Message}");
+                DebugUtility.DebugPrint(_debug, $"Cannot Deserialize JSON Object. Error: {jse.Message}");
             }
             catch (Exception ex)
             {
-                CrestronConsole.PrintLine($"Error in ParseResponse: {ex.Message}");
+                DebugUtility.DebugPrint(_debug, $"Error in ParseResponse: {ex.Message}");
             }
-            
+
         }
 
         public void ParseRouteResponse(string rsp)
         {
-            CrestronConsole.PrintLine($"ParseRouteResponse Entered");
-
             try
             {
                 if (rsp.Contains("matrix aset"))
@@ -247,87 +250,101 @@ namespace TSI.MXNet
                     string enc = rspCmd[3];
                     string dec = rspCmd[4];
 
-                    CrestronConsole.PrintLine($"Enc: {enc} | Dec: {dec}");
+                    int decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
+                    int encIndex = mxnetEncoders.FindIndex(x => x.id == enc);
 
-                    ushort decIndex = (ushort)_decoders.FindIndex(x => x.Id == dec); //FindIndex returns -1 when no match is found, consider managing that condition
-                    ushort encIndex = (ushort)_encoders.FindIndex(x => x.Id == enc);
+                    DebugUtility.DebugPrint(_debug, $"ParseRouteRepsonse - decIndex: {decIndex} | encIndex: {encIndex}\n");
 
-                    CrestronConsole.PrintLine($"decIndex: {decIndex} | encIndex: {encIndex}");
-
-                    _routes[decIndex] = encIndex;
-
-                    RouteEventArgs args = new RouteEventArgs
+                    if (decIndex != -1 && encIndex != -1)
                     {
-                        destIndex = (ushort)(decIndex + 1),
-                        sourceIndex = (ushort)(encIndex + 1)
-                    };
+                        mxnetDecoders[decIndex].streamSource = mxnetEncoders[encIndex].id;
 
-                    RouteEvent?.Invoke(this, args);
+                        RouteEventArgs args = new RouteEventArgs
+                        {
+                            destIndex = (ushort)(decIndex),
+                            sourceIndex = (ushort)(encIndex),
+                            streamOn = 1,
+                            streamSource = mxnetEncoders[encIndex].id
+                        };
+
+                        DebugUtility.DebugPrint(_debug, $"Sending Route Event to SImpl+\n");
+                        DebugUtility.DebugPrint(_debug, $"Dest[{args.destIndex}] ==> {args.sourceIndex}\n");
+                        DebugUtility.DebugPrint(_debug, $"StreamOn: {args.streamOn == 1} | StreamSource: {args.streamSource}");
+
+                        RouteEvent?.Invoke(this, args);
+                    }
                 }
 
-                if (rsp.Contains("config set device videopathdisable"))
+                else if (rsp.Contains("config set device videopathdisable"))
                 {
                     string[] rspCmd = rsp.Split(' ');
                     string dec = rspCmd[4];
 
-                    ushort decIndex = (ushort)_decoders.FindIndex(x => x.Id == dec);
-                    ushort encIndex = 99;
+                    int decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
 
-                    _routes[decIndex] = encIndex;
-
-                    RouteEventArgs args = new RouteEventArgs
+                    if (decIndex != -1)
                     {
-                        destIndex = (ushort)(decIndex + 1),
-                        sourceIndex = encIndex
-                    };
+                        RouteEventArgs args = new RouteEventArgs
+                        {
+                            destIndex = (ushort)(decIndex + 1),
+                            sourceIndex = 99,
+                            streamOn = 1,
+                            streamSource = ""
+                        };
 
-                    RouteEvent?.Invoke(this, args);
+                        RouteEvent?.Invoke(this, args);
+                    }
+                }
+                else if (rsp.Contains("device stream off"))
+                {
+                    string[] rspCmd = rsp.Split(' ');
+                    string dec = rspCmd[5];
+
+                    int decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
+
+                    if (decIndex != -1)
+                    {
+                        RouteEventArgs args = new RouteEventArgs
+                        {
+                            destIndex = (ushort)decIndex,
+                            sourceIndex = 99,
+                            streamOn = 0,
+                            streamSource = ""
+                        };
+
+                        RouteEvent?.Invoke(this, args);
+                    }
                 }
             }
             catch (Exception e)
             {
-                CrestronConsole.PrintLine($"Error in ParseRouteResponse: {e.Message}");
+                DebugUtility.DebugPrint(_debug, $"Error in ParseRouteResponse: {e.Message}");
             }
 
         }
 
-        public void Switch(string type, ushort sourceIndex, ushort destIndex)
+        public void Switch(string type, int sourceIndex, int destIndex) //zero based
         {
-            CrestronConsole.PrintLine($"SourceIndex: {sourceIndex} | DestIndex: {destIndex}");
-            CrestronConsole.PrintLine($"Decoder Count: {_decoders.Count} | Encoder Count: {_encoders.Count}");
-
-            foreach(var d in _decoders)
-            {
-                CrestronConsole.PrintLine($"Decoder: {d.Id}");
-            }
-
-            int i = 0;
-            foreach (ushort r in _routes)
-            {
-                CrestronConsole.PrintLine($"route[{i}]:{r}");
-                i++;
-            }
+            DebugUtility.DebugPrint(_debug, $"SourceIndex: {sourceIndex} | DestIndex: {destIndex}");
 
             try
-            {              
-                if (sourceIndex == 0 && (destIndex - 1) < _decoders.Count)
+            {
+                if (sourceIndex == -1 && (destIndex < mxnetDecoders.Count))
                 {
-                    string cmd = $"c s d videopathdisable {_decoders[destIndex - 1].Id}\n";
-                    _routes[destIndex - 1] = 0;
+                    string cmd = $"config set device videopathdisable {mxnetDecoders[destIndex].id}\n";
                     QueueCommand(cmd);
                 }
-                else if ((sourceIndex - 1) <= _encoders.Count && (destIndex - 1) <= _decoders.Count)               
+                else if ((sourceIndex <= mxnetEncoders.Count) && (destIndex < mxnetDecoders.Count))
                 {
-                    _routes[destIndex - 1] = sourceIndex;
-                    string cmd = $"matrix aset :{type} {_encoders[sourceIndex - 1].Id} {_decoders[destIndex - 1].Id}\n";
+                    string cmd = $"matrix aset :{type} {mxnetEncoders[sourceIndex].id} {mxnetDecoders[destIndex].id}\n";
                     QueueCommand(cmd);
                 }
             }
             catch (Exception ex)
             {
-                CrestronConsole.PrintLine($"Error in Switch (Ushort): {ex.Message}");
+                DebugUtility.DebugPrint(_debug, $"Error in Switch (Ushort): {ex.Message}");
             }
-            
+
         }
 
         public void Switch(string type, string sourceID, string destID)
@@ -337,5 +354,5 @@ namespace TSI.MXNet
         }
     }
 
-   
+
 }

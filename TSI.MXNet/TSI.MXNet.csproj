@@ -87,7 +87,9 @@
     <Compile Include="JsonResponse\DetailedInfoReportResponse.cs" />
     <Compile Include="JsonResponse\SimpleInfoResponse.cs" />
     <Compile Include="EventArgs\EventArgs.cs" />
+    <Compile Include="Mxnet Devices\MxnetDeviceBase.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="UtilityClasses\DebugUtility.cs" />
     <Compile Include="UtilityClasses\TcpClientAsync.cs" />
   </ItemGroup>
   <ItemGroup>
