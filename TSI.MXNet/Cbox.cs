@@ -2,10 +2,9 @@
 using Crestron.SimplSharp;
 using Newtonsoft.Json;
 using System.Collections.Generic;
-using TSI.MXNet.JsonResponses;
 using System.Linq;
 using TcpClientLibrary;
-using TSI.MXNet.UtilityClasses;
+using TSI.UtilityClasses;
 
 
 namespace TSI.MXNet
@@ -14,7 +13,7 @@ namespace TSI.MXNet
     {
         private bool _debug;
 
-        private TcpClientExample _asyncClient;
+        private TcpClientAsync _asyncClient;
 
         private string _ipaddress;
         private ushort _port;
@@ -43,7 +42,11 @@ namespace TSI.MXNet
 
         public ushort Debug
         {
-            set { _debug = value == 1; }
+            set 
+            {
+                _debug = value == 1;
+                DebugUtility.DebugPrint(_debug, $"Debug is {_debug}");
+            }
         }
 
 
@@ -56,7 +59,7 @@ namespace TSI.MXNet
         {
             try
             {
-                _asyncClient = new TcpClientExample(IPAddress, Port);
+                _asyncClient = new TcpClientAsync(IPAddress, Port);
                 _asyncClient.ResponseReceived += Client_ResponseReceived;
             }
             catch (Exception ex)
@@ -286,8 +289,8 @@ namespace TSI.MXNet
                     {
                         RouteEventArgs args = new RouteEventArgs
                         {
-                            destIndex = (ushort)(decIndex + 1),
-                            sourceIndex = 99,
+                            destIndex = (ushort)(decIndex),
+                            sourceIndex = 0,
                             streamOn = 1,
                             streamSource = ""
                         };
@@ -307,9 +310,26 @@ namespace TSI.MXNet
                         RouteEventArgs args = new RouteEventArgs
                         {
                             destIndex = (ushort)decIndex,
-                            sourceIndex = 99,
-                            streamOn = 0,
-                            streamSource = ""
+                            streamOn = 0
+                        };
+
+                        RouteEvent?.Invoke(this, args);
+                    }
+
+                }
+                else if (rsp.Contains("device stream on"))
+                {
+                    string[] rspCmd = rsp.Split(' ');
+                    string dec = rspCmd[5];
+
+                    int decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
+
+                    if (decIndex != -1)
+                    {
+                        RouteEventArgs args = new RouteEventArgs
+                        {
+                            destIndex = (ushort)decIndex,
+                            streamOn = 1
                         };
 
                         RouteEvent?.Invoke(this, args);
@@ -323,20 +343,15 @@ namespace TSI.MXNet
 
         }
 
-        public void Switch(string type, int sourceIndex, int destIndex) //zero based
+        public void Switch(string type, ushort sourceIndex, ushort destIndex) //zero based
         {
             DebugUtility.DebugPrint(_debug, $"SourceIndex: {sourceIndex} | DestIndex: {destIndex}");
 
             try
             {
-                if (sourceIndex == -1 && (destIndex < mxnetDecoders.Count))
+                if ((sourceIndex <= mxnetEncoders.Count) && (destIndex <= mxnetDecoders.Count))
                 {
-                    string cmd = $"config set device videopathdisable {mxnetDecoders[destIndex].id}\n";
-                    QueueCommand(cmd);
-                }
-                else if ((sourceIndex <= mxnetEncoders.Count) && (destIndex < mxnetDecoders.Count))
-                {
-                    string cmd = $"matrix aset :{type} {mxnetEncoders[sourceIndex].id} {mxnetDecoders[destIndex].id}\n";
+                    string cmd = $"matrix aset :{type} {mxnetEncoders[sourceIndex - 1].id} {mxnetDecoders[destIndex - 1].id}\n";
                     QueueCommand(cmd);
                 }
             }
@@ -351,6 +366,27 @@ namespace TSI.MXNet
         {
             string cmd = $"matrix aset :{type} {sourceID} {destID}\n";
             QueueCommand(cmd);
+        }
+
+        public void VideoPathDisable(ushort destIndex)
+        {
+
+            if (destIndex <= mxnetDecoders.Count)
+            {
+                string cmd = $"config set device videopathdisable {mxnetDecoders[destIndex - 1].id}\n";
+                QueueCommand(cmd);
+            }
+        }
+
+        public void SetStreamStatus(ushort destIndex, ushort s)
+        {
+            if (destIndex <= mxnetDecoders.Count)
+            {
+                string state = s == 1 ? "on" : "off";
+                string cmd = $"config set device stream {state} {mxnetDecoders[destIndex - 1].id}";
+                QueueCommand(cmd);
+            }
+
         }
     }
 

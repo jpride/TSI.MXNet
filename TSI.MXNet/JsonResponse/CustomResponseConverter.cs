@@ -2,7 +2,7 @@
 using Newtonsoft.Json.Linq;
 using System;
 
-namespace TSI.MXNet.JsonResponses
+namespace TSI.MXNet
 {
     public class CustomResponseConverter : JsonConverter
     {

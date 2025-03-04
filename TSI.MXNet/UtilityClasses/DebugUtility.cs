@@ -1,6 +1,6 @@
 ﻿using Crestron.SimplSharp;
 
-namespace TSI.MXNet.UtilityClasses
+namespace TSI.UtilityClasses
 {
     public static class DebugUtility
     {

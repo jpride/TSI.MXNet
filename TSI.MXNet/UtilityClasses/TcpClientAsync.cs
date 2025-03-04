@@ -7,17 +7,19 @@ using System.Threading.Tasks;
 
 namespace TcpClientLibrary
 {
-    public class TcpClientExample : IDisposable
+    public class TcpClientAsync : IDisposable
     {
         private readonly TcpClient _client;
         private readonly NetworkStream _stream;
         private readonly ConcurrentQueue<string> _commandQueue;
         private readonly CancellationTokenSource _cancellationTokenSource;
+        private readonly int CommandQueueDelay = 400;
+
 
         public event EventHandler<string> ResponseReceived;
 
 
-        public TcpClientExample(string ipAddress, int port)
+        public TcpClientAsync(string ipAddress, int port)
         {
             _client = new TcpClient();
             _client.Connect(ipAddress, port);
@@ -41,7 +43,7 @@ namespace TcpClientLibrary
                 {
                     byte[] data = Encoding.UTF8.GetBytes(command + Environment.NewLine);
                     await _stream.WriteAsync(data, 0, data.Length, _cancellationTokenSource.Token);
-                    await Task.Delay(400); // 200 milliseconds delay between messages
+                    await Task.Delay(CommandQueueDelay); //delay between messages
                 }
                 else
                 {
@@ -72,8 +74,6 @@ namespace TcpClientLibrary
         {
             ResponseReceived?.Invoke(this, response);
         }
-
-
 
         public void Stop()
         {
