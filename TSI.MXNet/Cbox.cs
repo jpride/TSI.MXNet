@@ -61,6 +61,7 @@ namespace TSI.MXNet
             {
                 _asyncClient = new TcpClientAsync(IPAddress, Port);
                 _asyncClient.ResponseReceived += Client_ResponseReceived;
+                _asyncClient.Initialize();
             }
             catch (Exception ex)
             {
@@ -130,7 +131,7 @@ namespace TSI.MXNet
                         string deviceId = kvp.Key;
                         Device device = kvp.Value;
 
-                        if (device.Modelname == "AC-MXNET-1G-R")
+                        if (device.Modelname == "AC-MXNET-1G-R" | device.Modelname == "AC-MXNET-1G-D")
                         {
                             MxnetDecoder d = new MxnetDecoder
                             {
