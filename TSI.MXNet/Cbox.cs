@@ -27,7 +27,6 @@ namespace TSI.MXNet
         public event EventHandler<SimpleResponseEventArgs> SimpleResponseEvent;
         public event EventHandler<RouteEventArgs> RouteEvent;
 
-
         public string IPAddress
         {
             get { return _ipaddress; }
@@ -48,7 +47,6 @@ namespace TSI.MXNet
                 DebugUtility.DebugPrint(_debug, $"Debug is {_debug}");
             }
         }
-
 
         public CBox()
         {
@@ -83,7 +81,6 @@ namespace TSI.MXNet
 
         public void SplitResponse(string response)
         {
-
             string[] rspArray = response.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
             try
@@ -98,12 +95,10 @@ namespace TSI.MXNet
                 DebugUtility.DebugPrint(_debug, $"Exception in SplitResponse: {e.Message}\n");
                 DebugUtility.DebugPrint(_debug, $"{e.StackTrace}\n");
             }
-
         }
 
         public void ParseResponse(string response)
         {
-
             try
             {
                 JsonSerializerSettings settings = new JsonSerializerSettings
@@ -278,7 +273,6 @@ namespace TSI.MXNet
                         RouteEvent?.Invoke(this, args);
                     }
                 }
-
                 else if (rsp.Contains("config set device videopathdisable"))
                 {
                     string[] rspCmd = rsp.Split(' ');
@@ -341,7 +335,6 @@ namespace TSI.MXNet
             {
                 DebugUtility.DebugPrint(_debug, $"Error in ParseRouteResponse: {e.Message}");
             }
-
         }
 
         public void Switch(string type, ushort sourceIndex, ushort destIndex) //zero based
@@ -371,7 +364,6 @@ namespace TSI.MXNet
 
         public void VideoPathDisable(ushort destIndex)
         {
-
             if (destIndex <= mxnetDecoders.Count)
             {
                 string cmd = $"config set device videopathdisable {mxnetDecoders[destIndex - 1].id}\n";
