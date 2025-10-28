@@ -9,37 +9,37 @@ using TSI.UtilityClasses;
 
 namespace TSI.MXNet
 {
-    public class CBox
+    public static class CBox
     {
-        private bool _debug;
+        private static bool _debug;
 
-        private TcpClientAsync _asyncClient;
+        private static TcpClientAsync _asyncClient;
 
-        private string _ipaddress;
-        private ushort _port;
+        private static string _ipaddress;
+        private static ushort _port;
 
-        public List<MxnetDecoder> mxnetDecoders = new List<MxnetDecoder>();
-        public List<MxnetEncoder> mxnetEncoders = new List<MxnetEncoder>();
+        public static List<MxnetDecoder> mxnetDecoders = new List<MxnetDecoder>();
+        public static List<MxnetEncoder> mxnetEncoders = new List<MxnetEncoder>();
 
-        public event EventHandler<ResponseErrorEventArgs> ResponseErrorEvent;
-        public event EventHandler<rs232ResponseEventArgs> Rs232ResponseEvent;
-        public event EventHandler<DeviceListUpdateEventArgs> DeviceListUpdateEvent;
-        public event EventHandler<SimpleResponseEventArgs> SimpleResponseEvent;
-        public event EventHandler<RouteEventArgs> RouteEvent;
+        public static event EventHandler<ResponseErrorEventArgs> ResponseErrorEvent;
+        public static event EventHandler<rs232ResponseEventArgs> Rs232ResponseEvent;
+        public static event EventHandler<DeviceListUpdateEventArgs> DeviceListUpdateEvent;
+        public static event EventHandler<SimpleResponseEventArgs> SimpleResponseEvent;
+        public static event EventHandler<RouteEventArgs> RouteEvent;
 
-        public string IPAddress
+        public static string IPAddress
         {
             get { return _ipaddress; }
             set { _ipaddress = value; }
         }
 
-        public ushort Port
+        public static ushort Port
         {
             get { return _port; }
             set { _port = value; }
         }
 
-        public ushort Debug
+        public static ushort Debug
         {
             set 
             {
@@ -48,12 +48,8 @@ namespace TSI.MXNet
             }
         }
 
-        public CBox()
-        {
 
-        }
-
-        public void InitializeClient()
+        public static void InitializeClient()
         {
             try
             {
@@ -68,18 +64,18 @@ namespace TSI.MXNet
             }
         }
 
-        private void Client_ResponseReceived(object sender, string response)
+        private static void Client_ResponseReceived(object sender, string response)
         {
             Console.WriteLine("Received: " + response);
             SplitResponse(response);
         }
 
-        public void QueueCommand(string cmd)
+        public static void QueueCommand(string cmd)
         {
             _asyncClient.QueueCommand(cmd);
         }
 
-        public void SplitResponse(string response)
+        public static void SplitResponse(string response)
         {
             string[] rspArray = response.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -97,7 +93,7 @@ namespace TSI.MXNet
             }
         }
 
-        public void ParseResponse(string response)
+        public static void ParseResponse(string response)
         {
             try
             {
@@ -239,7 +235,7 @@ namespace TSI.MXNet
 
         }
 
-        public void ParseRouteResponse(string rsp)
+        public static void ParseRouteResponse(string rsp)
         {
             try
             {
@@ -337,7 +333,7 @@ namespace TSI.MXNet
             }
         }
 
-        public void Switch(string type, ushort sourceIndex, ushort destIndex) //zero based
+        public static void Switch(string type, ushort sourceIndex, ushort destIndex) //zero based
         {
             DebugUtility.DebugPrint(_debug, $"SourceIndex: {sourceIndex} | DestIndex: {destIndex}");
 
@@ -356,13 +352,13 @@ namespace TSI.MXNet
 
         }
 
-        public void Switch(string type, string sourceID, string destID)
+        public static void Switch(string type, string sourceID, string destID)
         {
             string cmd = $"matrix aset :{type} {sourceID} {destID}\n";
             QueueCommand(cmd);
         }
 
-        public void VideoPathDisable(ushort destIndex)
+        public static void VideoPathDisable(ushort destIndex)
         {
             if (destIndex <= mxnetDecoders.Count)
             {
@@ -371,7 +367,7 @@ namespace TSI.MXNet
             }
         }
 
-        public void SetStreamStatus(ushort destIndex, ushort s)
+        public static void SetStreamStatus(ushort destIndex, ushort s)
         {
             if (destIndex <= mxnetDecoders.Count)
             {
