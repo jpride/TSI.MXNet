@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Text;
 using Crestron.SimplSharp;
 using Independentsoft.Exchange;
 using Newtonsoft.Json;
@@ -14,18 +15,17 @@ namespace TSI.MXNet
     public sealed class CBox
     {
 
-        private static readonly CBox _instance = new CBox();
+        private static CBox _instance;
         public static CBox Instance {get { return _instance; }}
 
-        public CBox()
-        { 
-            
-        }
+
 
         private bool _debug;
         private TcpClientAsync _asyncClient;
         private string _ipaddress;
         private ushort _port;
+
+        internal static readonly object _listLock = new object();
 
         public List<MxnetDecoder> mxnetDecoders { get; private set;}
         public List<MxnetEncoder> mxnetEncoders { get; private set; }
@@ -59,11 +59,26 @@ namespace TSI.MXNet
         }
 
 
-        public void InitializeClient()
+
+        public CBox()
         {
+            if (_instance == null)
+            {                 
+                _instance = this;
+                CrestronConsole.PrintLine($"CBox Singleton Instance has been set");
+            }
+            else
+            {
+                throw new Exception("CBox is a singleton class and has already been instantiated.");
+            }
+
+            CrestronConsole.PrintLine($"CBox Constructor");
             mxnetDecoders = new List<MxnetDecoder>();
             mxnetEncoders = new List<MxnetEncoder>();
+        }
 
+        public void InitializeClient()
+        {
             try
             {
                 _asyncClient = new TcpClientAsync(IPAddress, Port);
@@ -132,77 +147,81 @@ namespace TSI.MXNet
                     Converters = new List<JsonConverter> { new CustomResponseConverter() }
                 };
 
-                BaseResponse deviceListResponse = JsonConvert.DeserializeObject<BaseResponse>(response, settings);
-                BaseResponse simpleInfoResponse = JsonConvert.DeserializeObject<BaseResponse>(response, settings);
-                BaseResponse errorResponse = JsonConvert.DeserializeObject<BaseResponse>(response, settings);
-                BaseResponse detailedInfoReportResponse = JsonConvert.DeserializeObject<BaseResponse>(response, settings);
+                BaseResponse baseResponse = JsonConvert.DeserializeObject<BaseResponse>(response, settings);
 
-
-                if (deviceListResponse is DeviceListResponse detailedResponse)
+                if (baseResponse is DeviceListResponse detailedResponse)
                 {
-
-                    DeviceListUpdateEventArgs args = new DeviceListUpdateEventArgs();
-
-                    mxnetDecoders.Clear();
-                    mxnetEncoders.Clear();
-
-                    foreach (var kvp in detailedResponse.Info)
+                    if (detailedResponse.Info != null && detailedResponse.Info.Any())
                     {
-                        string deviceId = kvp.Key;
-                        Device device = kvp.Value;
+                        CrestronConsole.PrintLine($"CBox: Parsing DeviceListResponse");
+                        DeviceListUpdateEventArgs args = new DeviceListUpdateEventArgs();                        
 
-                        if (device.Modelname == "AC-MXNET-1G-R" | device.Modelname == "AC-MXNET-1G-D")
+                        lock (_listLock)
                         {
-                            MxnetDecoder d = new MxnetDecoder
-                            {
-                                id = device.Id,
-                                ip = device.Ip,
-                                mac = device.Mac,
-                                modelname = device.Modelname,
-                            };
+                            mxnetDecoders.Clear();
+                            mxnetEncoders.Clear();
 
-                            mxnetDecoders.Add(d);
+                            foreach (var kvp in detailedResponse.Info)
+                            {
+                                string deviceId = kvp.Key;
+                                Device device = kvp.Value;
+
+                                if (device.Modelname == "AC-MXNET-1G-R" | device.Modelname == "AC-MXNET-1G-D")
+                                {
+                                    MxnetDecoder d = new MxnetDecoder
+                                    {
+                                        id = device.Id,
+                                        ip = device.Ip,
+                                        mac = device.Mac,
+                                        modelname = device.Modelname,
+                                    };
+                                    CrestronConsole.PrintLine($"adding Decoder: {d.id} to 'mxnetDecoders' list");
+                                    mxnetDecoders.Add(d);
+                                }
+                                else if (device.Modelname == "AC-MXNET-1G-T")
+                                {
+                                    MxnetEncoder e = new MxnetEncoder
+                                    {
+                                        id = device.Id,
+                                        ip = device.Ip,
+                                        mac = device.Mac,
+                                        modelname = device.Modelname
+                                    };
+                                    CrestronConsole.PrintLine($"adding Encoder: {e.id} to 'mxnetEncoders' list");
+                                    mxnetEncoders.Add(e);
+                                }
+                            }
+
+                            mxnetDecoders = mxnetDecoders.OrderBy(d => d.id).ToList(); //Devices must be named with "01Decoder, 02 Decoder..."
+                            mxnetEncoders = mxnetEncoders.OrderBy(d => d.id).ToList();
+
                         }
-                        else if (device.Modelname == "AC-MXNET-1G-T")
+
+                        List<string> _encIdStrings = new List<string>();
+                        foreach (MxnetEncoder e in mxnetEncoders)
                         {
-                            MxnetEncoder e = new MxnetEncoder
-                            {
-                                id = device.Id,
-                                ip = device.Ip,
-                                mac = device.Mac,
-                                modelname = device.Modelname
-                            };
-
-                            mxnetEncoders.Add(e);
+                            CrestronConsole.PrintLine($"adding Encoder: {e.id} @ {mxnetEncoders.FindIndex(x => x.id == e.id)}");
+                            _encIdStrings.Add(e.id);
                         }
+
+                        List<string> _decIdStrings = new List<string>();
+                        foreach (MxnetDecoder d in mxnetDecoders)
+                        {
+                            CrestronConsole.PrintLine($"adding Decoder: {d.id} @ {mxnetDecoders.FindIndex(x => x.id == d.id)}");
+                            _decIdStrings.Add(d.id);
+                        }
+
+                        args.encoders = _encIdStrings.ToArray();
+                        args.decoders = _decIdStrings.ToArray();
+
+                        args.encoderCount = (ushort)_encIdStrings.Count;
+                        args.decoderCount = (ushort)_decIdStrings.Count;
+
+                        DeviceListUpdateEvent?.Invoke(this, args);
                     }
-
-                    mxnetDecoders = mxnetDecoders.OrderBy(d => d.id).ToList(); //Devices must be named with "01Decoder, 02 Decoder..."
-                    mxnetEncoders = mxnetEncoders.OrderBy(d => d.id).ToList();
-
-                    List<string> _encIdStrings = new List<string>();
-                    foreach (MxnetEncoder e in mxnetEncoders)
-                    {
-                        _encIdStrings.Add(e.id);
-                    }
-
-                    List<string> _decIdStrings = new List<string>();
-                    foreach (MxnetDecoder d in mxnetDecoders)
-                    {
-                        _decIdStrings.Add(d.id);
-                    }
-
-                    args.encoders = _encIdStrings.ToArray();
-                    args.decoders = _decIdStrings.ToArray();
-
-                    args.encoderCount = (ushort)_encIdStrings.Count;
-                    args.decoderCount = (ushort)_decIdStrings.Count;
-
-                    DeviceListUpdateEvent?.Invoke(this, args);
-
                 }
 
-                else if (simpleInfoResponse is SimpleInfoResponse simpleResponse)
+                else if (baseResponse is SimpleInfoResponse simpleResponse)
                 {
                     SimpleResponseEventArgs args = new SimpleResponseEventArgs
                     {
@@ -221,7 +240,7 @@ namespace TSI.MXNet
                     }
                 }
 
-                else if (errorResponse is ErrorResponse errorRsp)
+                else if (baseResponse is ErrorResponse errorRsp)
                 {
                     ResponseErrorEventArgs args = new ResponseErrorEventArgs
                     {
@@ -233,7 +252,7 @@ namespace TSI.MXNet
                     ResponseErrorEvent?.Invoke(this, args);
                 }
 
-                else if (detailedInfoReportResponse is DetailedInfoReportResponse reportRsp)
+                else if (baseResponse is DetailedInfoReportResponse reportRsp)
                 {
                     SimpleResponseEventArgs args = new SimpleResponseEventArgs
                     {
@@ -274,8 +293,14 @@ namespace TSI.MXNet
                     string enc = rspCmd[3];
                     string dec = rspCmd[4];
 
-                    int decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
-                    int encIndex = mxnetEncoders.FindIndex(x => x.id == enc);
+                    int decIndex;
+                    int encIndex;
+
+                    lock (_listLock)
+                    {
+                        decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
+                        encIndex = mxnetEncoders.FindIndex(x => x.id == enc);
+                    }
 
                     DebugUtility.DebugPrint(_debug, $"ParseRouteRepsonse - decIndex: {decIndex} | encIndex: {encIndex}\n");
 
@@ -367,16 +392,36 @@ namespace TSI.MXNet
 
         }
 
+
+        public void PrintLists()
+        {
+            CrestronConsole.PrintLine($"MxnetDecoders List:");
+            foreach(MxnetDecoder d in mxnetDecoders)
+            {
+                CrestronConsole.PrintLine($"Decoder ID: {d.id} | IP: {d.ip} | MAC: {d.mac} | Model: {d.modelname}");
+            }
+
+            CrestronConsole.PrintLine($"MxnetEncoders List:");
+            foreach (MxnetEncoder e in mxnetEncoders)
+            {
+                CrestronConsole.PrintLine($"Encoder ID: {e.id} | IP: {e.ip} | MAC: {e.mac} | Model: {e.modelname}");
+            }
+
+        }
         public void Switch(string type, ushort sourceIndex, ushort destIndex) //zero based
         {
             DebugUtility.DebugPrint(_debug, $"SourceIndex: {sourceIndex} | DestIndex: {destIndex}");
 
             try
             {
-                if ((sourceIndex <= mxnetEncoders.Count) && (destIndex <= mxnetDecoders.Count))
+                lock (_listLock)
                 {
-                    string cmd = $"matrix aset :{type} {mxnetEncoders[sourceIndex - 1].id} {mxnetDecoders[destIndex - 1].id}\n";
-                    QueueCommand(cmd);
+
+                    if ((sourceIndex <= mxnetEncoders.Count) && (destIndex <= mxnetDecoders.Count))
+                    {
+                        string cmd = $"matrix aset :{type} {mxnetEncoders[sourceIndex - 1].id} {mxnetDecoders[destIndex - 1].id}\n";
+                        QueueCommand(cmd);
+                    }
                 }
             }
             catch (Exception ex)
