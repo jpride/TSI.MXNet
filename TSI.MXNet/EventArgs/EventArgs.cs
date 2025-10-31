@@ -10,9 +10,9 @@ namespace TSI.MXNet
     }
     public class ResponseErrorEventArgs : EventArgs
     {
-        public string error { get; set; }
-        public string cmd { get; set; }
-        public int code { get; set; }    
+        public string Error { get; set; }
+        public string Cmd { get; set; }
+        public int Code { get; set; }    
     }
 
     public class rs232ResponseEventArgs : DataResponseBaseEventArgs
@@ -39,10 +39,16 @@ namespace TSI.MXNet
 
     public class RouteEventArgs : EventArgs
     {
-        public ushort destIndex { get; set; }
-        public ushort sourceIndex { get; set; }
-        public string streamSource { get; set; }
-        public ushort streamOn { get; set; }
+        public string DecoderId { get; set; }
+        public ushort DestIndex { get; set; }
+        public ushort SourceIndex { get; set; }
+        public string SourceId { get; set; }
+        public ushort StreamOn { get; set; }
 
+    }
+
+    public class ConnectionStatusEventArgs : EventArgs
+    {
+        public ushort IsConnected { get; set; }
     }
 }

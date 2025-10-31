@@ -1,32 +1,41 @@
 ﻿using System;
-using Crestron.SimplSharp;
-using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using Crestron.SimplSharp;
+using Independentsoft.Exchange;
+using Newtonsoft.Json;
 using TcpClientLibrary;
 using TSI.UtilityClasses;
 
 
 namespace TSI.MXNet
 {
-    public class CBox
+    public sealed class CBox
     {
+
+        private static readonly CBox _instance = new CBox();
+        public static CBox Instance {get { return _instance; }}
+
+        public CBox()
+        { 
+            
+        }
+
         private bool _debug;
-
         private TcpClientAsync _asyncClient;
-
         private string _ipaddress;
         private ushort _port;
 
-        public List<MxnetDecoder> mxnetDecoders = new List<MxnetDecoder>();
-        public List<MxnetEncoder> mxnetEncoders = new List<MxnetEncoder>();
+        public List<MxnetDecoder> mxnetDecoders { get; private set;}
+        public List<MxnetEncoder> mxnetEncoders { get; private set; }
 
         public event EventHandler<ResponseErrorEventArgs> ResponseErrorEvent;
         public event EventHandler<rs232ResponseEventArgs> Rs232ResponseEvent;
         public event EventHandler<DeviceListUpdateEventArgs> DeviceListUpdateEvent;
         public event EventHandler<SimpleResponseEventArgs> SimpleResponseEvent;
         public event EventHandler<RouteEventArgs> RouteEvent;
-
+        public event EventHandler<ConnectionStatusEventArgs> ConnectionStatusEvent;
 
         public string IPAddress
         {
@@ -50,17 +59,16 @@ namespace TSI.MXNet
         }
 
 
-        public CBox()
-        {
-
-        }
-
         public void InitializeClient()
         {
+            mxnetDecoders = new List<MxnetDecoder>();
+            mxnetEncoders = new List<MxnetEncoder>();
+
             try
             {
                 _asyncClient = new TcpClientAsync(IPAddress, Port);
                 _asyncClient.ResponseReceived += Client_ResponseReceived;
+                _asyncClient.ConnectionStatusChanged += Client_ConnectionChange;
                 _asyncClient.Initialize();
             }
             catch (Exception ex)
@@ -70,9 +78,21 @@ namespace TSI.MXNet
             }
         }
 
+        private void Client_ConnectionChange(object sender, bool e)
+        {
+            DebugUtility.DebugPrint(_debug, $"Connection Status: " + e);
+            
+            ConnectionStatusEventArgs args = new ConnectionStatusEventArgs
+            {
+                IsConnected = e ? (ushort)1 : (ushort)0
+            };
+
+            ConnectionStatusEvent?.Invoke(this, args);
+        }
+
         private void Client_ResponseReceived(object sender, string response)
         {
-            Console.WriteLine("Received: " + response);
+            DebugUtility.DebugPrint(_debug, $"Received: " + response);
             SplitResponse(response);
         }
 
@@ -205,9 +225,9 @@ namespace TSI.MXNet
                 {
                     ResponseErrorEventArgs args = new ResponseErrorEventArgs
                     {
-                        error = errorRsp.Error,
-                        cmd = errorRsp.Cmd,
-                        code = (ushort)errorRsp.Code
+                        Error = errorRsp.Error,
+                        Cmd = errorRsp.Cmd,
+                        Code = (ushort)errorRsp.Code
                     };
 
                     ResponseErrorEvent?.Invoke(this, args);
@@ -265,15 +285,15 @@ namespace TSI.MXNet
 
                         RouteEventArgs args = new RouteEventArgs
                         {
-                            destIndex = (ushort)(decIndex),
-                            sourceIndex = (ushort)(encIndex),
-                            streamOn = 1,
-                            streamSource = mxnetEncoders[encIndex].id
+                            DestIndex = (ushort)(decIndex),
+                            SourceIndex = (ushort)(encIndex),
+                            StreamOn = 1,
+                            SourceId = mxnetEncoders[encIndex].id
                         };
 
                         DebugUtility.DebugPrint(_debug, $"Sending Route Event to SImpl+\n");
-                        DebugUtility.DebugPrint(_debug, $"Dest[{args.destIndex}] ==> {args.sourceIndex}\n");
-                        DebugUtility.DebugPrint(_debug, $"StreamOn: {args.streamOn == 1} | StreamSource: {args.streamSource}");
+                        DebugUtility.DebugPrint(_debug, $"Dest[{args.DestIndex}] ==> {args.SourceIndex}\n");
+                        DebugUtility.DebugPrint(_debug, $"StreamOn: {args.StreamOn == 1} | StreamSource: {args.SourceId}");
 
                         RouteEvent?.Invoke(this, args);
                     }
@@ -290,10 +310,11 @@ namespace TSI.MXNet
                     {
                         RouteEventArgs args = new RouteEventArgs
                         {
-                            destIndex = (ushort)(decIndex),
-                            sourceIndex = 0,
-                            streamOn = 1,
-                            streamSource = ""
+                            DecoderId = dec,
+                            DestIndex = (ushort)(decIndex),
+                            SourceIndex = 0,
+                            StreamOn = 1,
+                            SourceId = ""
                         };
 
                         RouteEvent?.Invoke(this, args);
@@ -310,8 +331,9 @@ namespace TSI.MXNet
                     {
                         RouteEventArgs args = new RouteEventArgs
                         {
-                            destIndex = (ushort)decIndex,
-                            streamOn = 0
+                            DecoderId = dec,
+                            DestIndex = (ushort)decIndex,
+                            StreamOn = 0
                         };
 
                         RouteEvent?.Invoke(this, args);
@@ -329,8 +351,9 @@ namespace TSI.MXNet
                     {
                         RouteEventArgs args = new RouteEventArgs
                         {
-                            destIndex = (ushort)decIndex,
-                            streamOn = 1
+                            DecoderId = dec,
+                            DestIndex = (ushort)decIndex,
+                            StreamOn = 1
                         };
 
                         RouteEvent?.Invoke(this, args);
