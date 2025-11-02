@@ -7,21 +7,20 @@ namespace TSI.MXNet
 {
     public class MxnetDecoderClass
     {
+        //Events
         public event EventHandler<RouteEventArgs> CurrentRouteChanged;
         public event EventHandler<ResponseErrorEventArgs> ErrorReceived;
+        public event EventHandler Initialized;
 
-
+        //props and vars
         public ushort CurrentSourceIndex { get; private set; }
         public string CurrentSourceId { get; private set; }
         public ushort IsStreamOn { get; private set; }
-
         public string LastError { get; private set; }
         public string LastErrorCmd { get; private set; }
-
-        
         private string _myDecoderId; 
 
-
+        //methods
         public MxnetDecoderClass()
         {
 
@@ -35,17 +34,9 @@ namespace TSI.MXNet
             CBox.Instance.ResponseErrorEvent += CBox_ResponseErrorEvent;
             CBox.Instance.DeviceListUpdateEvent += CBox_DeviceListUpdateEvent;
 
-            CrestronConsole.PrintLine($"Decoder {_myDecoderId} Initialized");
-        }
+            Initialized?.Invoke(this, EventArgs.Empty);
+            //CrestronConsole.PrintLine($"Decoder {_myDecoderId} Initialized");
 
-
-
-        private void CBox_DeviceListUpdateEvent(object sender, DeviceListUpdateEventArgs e)
-        {
-            //CrestronConsole.PrintLine($"Decoder has received a CBox event");
-            //CrestronConsole.PrintLine($"CBox received a device list update.");
-            //CrestronConsole.PrintLine($"Decoders: {e.decoderCount}");
-            //CrestronConsole.PrintLine($"Encoders: {e.encoderCount}");
         }
 
         public void RequestVideoRoute(string switchType, ushort sourceIndex)
@@ -60,7 +51,7 @@ namespace TSI.MXNet
                     // Call the CBox singleton to send the command
                     CBox.Instance.Switch(switchType, sourceId, _myDecoderId);
                 }
-                else
+                else //if sourceindex is 0 perhaps send videopathdisable?)
                 {
                     CrestronConsole.PrintLine($"MxnetEncoders count: {CBox.Instance.mxnetEncoders.Count}");
                     CrestronConsole.PrintLine($"Invalid source index: {sourceIndex}");
@@ -72,12 +63,49 @@ namespace TSI.MXNet
             }
         }
 
+        public void RequestVideoPathDisable()
+        {
+            try
+            {
+                CBox.Instance.VideoPathDisable(_myDecoderId);
+            }
+            catch (Exception e)
+            {
+                CrestronConsole.PrintLine($"Error in RequestVideoPathDisable: {e.Message}");
+            }
+        }
+
+        public void RequestRs232CommandSend(string command, ushort HexOrAscii)
+        {
+            try
+            {
+                CBox.Instance.SendRs232Command(_myDecoderId, command, HexOrAscii);
+            }
+            catch (Exception e)
+            {
+                CrestronConsole.PrintLine($"Error in RequestRs232CommandSend: {e.Message}");
+            }
+        }
+
+        public void Dispose()
+        {
+            // Unsubscribe from the CBox events to prevent memory leaks
+            CBox.Instance.RouteEvent -= CBox_RouteEvent;
+            CBox.Instance.ResponseErrorEvent -= CBox_ResponseErrorEvent;
+        }
+
+        //Event handlers
+        private void CBox_DeviceListUpdateEvent(object sender, DeviceListUpdateEventArgs args)
+        {
+            int myDecIndex = Array.IndexOf(args.decoders, _myDecoderId);
+            if (myDecIndex != -1)
+            {
+                //do something?
+            }
+        }
 
         private void CBox_RouteEvent(object sender, RouteEventArgs args)
         {
-            //CrestronConsole.PrintLine($"Decoder {_myDecoderId} recieved route event from CBox");
-            //CrestronConsole.PrintLine($"Route Event: {args.DecoderId} => {args.SourceId}");
-
             if (args.DecoderId == _myDecoderId)
             {
                 CurrentSourceIndex = args.SourceIndex;
@@ -99,14 +127,6 @@ namespace TSI.MXNet
             }
         }
 
-        /// <summary>
-        /// S+ must call this when it is disposed
-        /// </summary>
-        public void Dispose()
-        {
-            // Unsubscribe from the CBox events to prevent memory leaks
-            CBox.Instance.RouteEvent -= CBox_RouteEvent;
-            CBox.Instance.ResponseErrorEvent -= CBox_ResponseErrorEvent;
-        }
+
     }
 }

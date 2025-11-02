@@ -66,14 +66,12 @@ namespace TSI.MXNet
             if (_instance == null)
             {                 
                 _instance = this;
-                //CrestronConsole.PrintLine($"CBox Singleton Instance has been set");
             }
             else
             {
                 throw new Exception("CBox is a singleton class and has already been instantiated.");
             }
 
-            //CrestronConsole.PrintLine($"CBox Constructor");
             mxnetDecoders = new List<MxnetDecoder>();
             mxnetEncoders = new List<MxnetEncoder>();
         }
@@ -193,7 +191,10 @@ namespace TSI.MXNet
 
                         mxnetDecoders = mxnetDecoders.OrderBy(d => d.id).ToList(); //Devices must be named with "01Decoder, 02 Decoder..."
                         mxnetEncoders = mxnetEncoders.OrderBy(d => d.id).ToList();
-                     
+
+                        //*******Maybe add an event that sends the Decoder List to the MxnetDecoderClass (internally) (...think about why)*******
+
+
                         List<string> _encIdStrings = new List<string>();
                         foreach (MxnetEncoder e in mxnetEncoders)
                         {
@@ -387,7 +388,6 @@ namespace TSI.MXNet
 
         }
 
-
         public void PrintLists()
         {
             CrestronConsole.PrintLine($"MxnetDecoders List:");
@@ -403,10 +403,9 @@ namespace TSI.MXNet
             }
 
         }
+        
         public void Switch(string type, ushort sourceIndex, ushort destIndex) //zero based
         {
-            //DebugUtility.DebugPrint(_debug, $"SourceIndex: {sourceIndex} | DestIndex: {destIndex}");
-
             try
             {
                 lock (_listLock)
@@ -434,11 +433,24 @@ namespace TSI.MXNet
 
         public void VideoPathDisable(ushort destIndex)
         {
-
             if (destIndex <= mxnetDecoders.Count)
             {
                 string cmd = $"config set device videopathdisable {mxnetDecoders[destIndex - 1].id}\n";
                 QueueCommand(cmd);
+            }
+        }
+
+        public void VideoPathDisable(string decoderId)
+        {
+            try
+            {
+                string cmd = $"config set device videopathdisable {decoderId}\n";
+                QueueCommand(cmd);
+            }
+            catch (Exception)
+            {
+
+                throw;
             }
         }
 
@@ -451,6 +463,19 @@ namespace TSI.MXNet
                 QueueCommand(cmd);
             }
 
+        }
+
+        public void SendRs232Command(string decoderId, string rs232cmd, ushort HexorAscii)
+        {
+            try
+            {
+                string cmd = $"config set device rs232 {HexorAscii} {rs232cmd} {decoderId}";
+                QueueCommand(cmd);
+            }
+            catch (Exception ex)
+            {
+                DebugUtility.DebugPrint(_debug, $"Error in SendRs232Command: {ex.Message}");
+            }
         }
     }
 
