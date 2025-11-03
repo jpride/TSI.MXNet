@@ -1,10 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
-using System.Text;
-using Crestron.SimplSharp;
-using Independentsoft.Exchange;
 using Newtonsoft.Json;
 using TcpClientLibrary;
 using TSI.UtilityClasses;
@@ -18,14 +14,10 @@ namespace TSI.MXNet
         private static CBox _instance;
         public static CBox Instance {get { return _instance; }}
 
-
-
         private bool _debug;
         private TcpClientAsync _asyncClient;
         private string _ipaddress;
         private ushort _port;
-
-        internal static readonly object _listLock = new object();
 
         public List<MxnetDecoder> mxnetDecoders { get; private set;}
         public List<MxnetEncoder> mxnetEncoders { get; private set; }
@@ -85,6 +77,8 @@ namespace TSI.MXNet
                 _asyncClient.ConnectionStatusChanged += Client_ConnectionChange;
                 _asyncClient.Initialize();
 
+                QueueCommand("config get devicelist\n");
+
                 InitializationCompleteEvent?.Invoke(this, new EventArgs());
             }
             catch (Exception ex)
@@ -96,8 +90,6 @@ namespace TSI.MXNet
 
         private void Client_ConnectionChange(object sender, bool e)
         {
-            //DebugUtility.DebugPrint(_debug, $"Connection Status: " + e);
-            
             ConnectionStatusEventArgs args = new ConnectionStatusEventArgs
             {
                 IsConnected = e ? (ushort)1 : (ushort)0
@@ -108,7 +100,7 @@ namespace TSI.MXNet
 
         private void Client_ResponseReceived(object sender, string response)
         {
-            //DebugUtility.DebugPrint(_debug, $"Received: " + response);
+            DebugUtility.DebugPrint(_debug, $"Received: " + response);
             SplitResponse(response);
         }
 
@@ -296,9 +288,6 @@ namespace TSI.MXNet
                     decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
                     encIndex = mxnetEncoders.FindIndex(x => x.id == enc);
                     
-
-                    //DebugUtility.DebugPrint(_debug, $"ParseRouteRepsonse - decIndex: {decIndex} | encIndex: {encIndex}\n");
-
                     if (decIndex != -1 && encIndex != -1)
                     {
                         mxnetDecoders[decIndex].streamSource = mxnetEncoders[encIndex].id;
@@ -311,10 +300,6 @@ namespace TSI.MXNet
                             StreamOn = 1,
                             SourceId = mxnetEncoders[encIndex].id
                         };
-
-                        //DebugUtility.DebugPrint(_debug, $"Raising Route Event\n");
-                        //DebugUtility.DebugPrint(_debug, $"Dest[{args.DestIndex}] ==> {args.SourceIndex}\n");
-                        //DebugUtility.DebugPrint(_debug, $"StreamOn: {args.StreamOn == 1} | StreamSource: {args.SourceId}");
 
                         RouteEvent?.Invoke(this, args);
                     }
@@ -387,35 +372,15 @@ namespace TSI.MXNet
             }
 
         }
-
-        public void PrintLists()
-        {
-            CrestronConsole.PrintLine($"MxnetDecoders List:");
-            foreach(MxnetDecoder d in mxnetDecoders)
-            {
-                CrestronConsole.PrintLine($"Decoder ID: {d.id} | IP: {d.ip} | MAC: {d.mac} | Model: {d.modelname}");
-            }
-
-            CrestronConsole.PrintLine($"MxnetEncoders List:");
-            foreach (MxnetEncoder e in mxnetEncoders)
-            {
-                CrestronConsole.PrintLine($"Encoder ID: {e.id} | IP: {e.ip} | MAC: {e.mac} | Model: {e.modelname}");
-            }
-
-        }
         
         public void Switch(string type, ushort sourceIndex, ushort destIndex) //zero based
         {
             try
             {
-                lock (_listLock)
+                if ((sourceIndex <= mxnetEncoders.Count) && (destIndex <= mxnetDecoders.Count))
                 {
-
-                    if ((sourceIndex <= mxnetEncoders.Count) && (destIndex <= mxnetDecoders.Count))
-                    {
-                        string cmd = $"matrix aset :{type} {mxnetEncoders[sourceIndex - 1].id} {mxnetDecoders[destIndex - 1].id}\n";
-                        QueueCommand(cmd);
-                    }
+                    string cmd = $"matrix aset :{type} {mxnetEncoders[sourceIndex - 1].id} {mxnetDecoders[destIndex - 1].id}\n";
+                    QueueCommand(cmd);
                 }
             }
             catch (Exception ex)
@@ -454,22 +419,18 @@ namespace TSI.MXNet
             }
         }
 
-        public void SetStreamStatus(ushort destIndex, ushort s)
+        public void SetStreamStatus(string decoderID, ushort s)
         {
-            if (destIndex <= mxnetDecoders.Count)
-            {
-                string state = s == 1 ? "on" : "off";
-                string cmd = $"config set device stream {state} {mxnetDecoders[destIndex - 1].id}";
-                QueueCommand(cmd);
-            }
-
+            string state = s == 1 ? "on" : "off";
+            string cmd = $"config set device stream {state} {decoderID}";
+            QueueCommand(cmd);
         }
 
         public void SendRs232Command(string decoderId, string rs232cmd, ushort HexorAscii)
         {
             try
             {
-                string cmd = $"config set device rs232 {HexorAscii} {rs232cmd} {decoderId}";
+                string cmd = $"config set device rs232 {HexorAscii} {rs232cmd} {decoderId}\n";
                 QueueCommand(cmd);
             }
             catch (Exception ex)

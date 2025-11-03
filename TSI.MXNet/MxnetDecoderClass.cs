@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using Crestron.SimplSharp;
 
 
@@ -84,6 +83,18 @@ namespace TSI.MXNet
             catch (Exception e)
             {
                 CrestronConsole.PrintLine($"Error in RequestRs232CommandSend: {e.Message}");
+            }
+        }
+
+        public void RequestStreamStatusChange(ushort OnOrOff)
+        {
+            try
+            {
+                CBox.Instance.SetStreamStatus(_myDecoderId, OnOrOff);
+            }
+            catch (Exception e)
+            {
+                CrestronConsole.PrintLine($"Error in RequestStreamOn: {e.Message}");
             }
         }
 
