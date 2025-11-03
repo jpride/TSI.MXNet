@@ -72,6 +72,15 @@ namespace TSI.MXNet
         {
             try
             {
+                if (_asyncClient != null) //clean up previous client if exists
+                { 
+                    _asyncClient.ResponseReceived -= Client_ResponseReceived;
+                    _asyncClient.ConnectionStatusChanged -= Client_ConnectionChange;
+
+                    _asyncClient.Dispose();
+                    _asyncClient = null;
+                }
+
                 _asyncClient = new TcpClientAsync(IPAddress, Port);
                 _asyncClient.ResponseReceived += Client_ResponseReceived;
                 _asyncClient.ConnectionStatusChanged += Client_ConnectionChange;
