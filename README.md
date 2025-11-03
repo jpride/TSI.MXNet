@@ -57,24 +57,24 @@ This is the main module for connecting to the CBox. **Use only one instance.**
 
 | Type | Name | Description |
 | :---- | :---- | :---- |
-| **Parameter** | cb\_Ipaddress\[15\] | The IP address or hostname of the MxNet CBox\[cite: 2067\]. |
-| **Parameter** | cb\_Port | The TCP port for the CBox (default is 24\)7.  |
-| **Input** | Debug | (D) Set high to enable detailed trace messages in the console\[cite: 2078\]. |
-| **Input** | InitializeCbox | (D) Pulse to connect to the CBox and initialize the singleton\[cite: 2069\]. |
-| **Input** | GetDeviceList | (D) Pulse to manually request an updated device list\[cite: 2079\]. |
-| **Input** | CommandToSend\[256\] | (S) Send a raw command string directly to the CBox\[cite: 2065, 2080\]. |
+| **Parameter** | cb\_Ipaddress\[15\] | The IP address or hostname of the MxNet CBox\. |
+| **Parameter** | cb\_Port | The TCP port for the CBox (default is 24\).  |
+| **Input** | Debug | (D) Set high to enable detailed trace messages in the console\. |
+| **Input** | InitializeCbox | (D) Pulse to connect to the CBox and initialize the singleton\. |
+| **Input** | GetDeviceList | (D) Pulse to manually request an updated device list\. |
+| **Input** | CommandToSend\[256\] | (S) Send a raw command string directly to the CBox\. |
 | **Input** | cbox\_ipaddress$\[15\] | (S) An alternate way to set the IP address via a serial signal. |
-| **Input** | SwitchDecoder\[64\] | (A) Array input to route a source (value) to a decoder (index)\[cite: 2081\]. |
-| **Input** | DecoderStreamOff\[64\] | (D) Array input to turn a decoder's stream off (index)\[cite: 2083\]. |
-| **Output** | Info | (S) Provides general info responses from the CBox\[cite: 2089\]. |
-| **Output** | Cmd | (S) Provides the last command sent or received\[cite: 2086, 2089\]. |
-| **Output** | Error | (S) Provides the last error message received\[cite: 2086\]. |
-| **Output** | IsCommunicating | (D) High when connected to the CBox TCP socket8.  |
-| **Output** | InitializationComplete | (D) High when connected *and* the device list has been received9.  |
-| **Output** | ErrorReceived | (D) Pulses when an error message is received from the CBox\[cite: 2085\]. |
+| **Input** | SwitchDecoder\[64\] | (A) Array input to route a source (value) to a decoder (index)\. |
+| **Input** | DecoderStreamOff\[64\] | (D) Array input to turn a decoder's stream off (index)\. |
+| **Output** | Info | (S) Provides general info responses from the CBox\. |
+| **Output** | Cmd | (S) Provides the last command sent or received\. |
+| **Output** | Error | (S) Provides the last error message received\. |
+| **Output** | IsCommunicating | (D) High when connected to the CBox TCP socket.  |
+| **Output** | InitializationComplete | (D) High when connected *and* the device list has been received.  |
+| **Output** | ErrorReceived | (D) Pulses when an error message is received from the CBox\. |
 | **Output** | EncoderID\[32\] | (S) Array of discovered Encoder IDs. |
-| **Output** | DecoderID\[64\] | (S) Array of discovered Decoder IDs\[cite: 2092\]. |
-| **Output** | Route\_fb\[64\] | (A) Array feedback of 1-based source routed to each decoder (index)\[cite: 2094\]. |
+| **Output** | DecoderID\[64\] | (S) Array of discovered Decoder IDs\. |
+| **Output** | Route\_fb\[64\] | (A) Array feedback of 1-based source routed to each decoder (index)\. |
 
 ---
 
@@ -84,16 +84,16 @@ This is the client module. **Use one instance per decoder.**
 
 | Type | Name | Description |
 | :---- | :---- | :---- |
-| **Parameter** | switchType\[2\] | Sets the switch type (e.g., "a", "v", "av", "u", "z" for all)\[cite: 5\]. |
+| **Parameter** | switchType\[2\] | Sets the switch type (e.g., "a", "v", "av", "u", "z" for all)\. |
 | **Input** | Initialize | (D) Pulse *after* CBox is initialized to register this decoder. |
-| **Input** | StreamOn | (D) Pulse to turn the decoder's stream on\[cite: 2\]. |
-| **Input** | StreamOff | (D) Pulse to turn the decoder's stream off10101010.  |
+| **Input** | StreamOn | (D) Pulse to turn the decoder's stream on\. |
+| **Input** | StreamOff | (D) Pulse to turn the decoder's stream off.  |
 | **Input** | route | (A) The 1-based index of the source (encoder) to route to this decoder. |
-| **Input** | videopathdisable | (D) Pulse to disable the video path for this decoder\[cite: 8\]. |
+| **Input** | videopathdisable | (D) Pulse to disable the video path for this decoder\. |
 | **Input** | DecoderID\[16\] | (S) The unique ID string for this specific decoder. **(Required)** |
-| **Output** | Route\_Fb | (A) The 1-based index of the source currently routed to this decoder11.  |
-| **Output** | Source\_Id$ | (S) The string ID of the source currently routed to this decoder12.  |
-| **Output** | StreamOn\_Fb | (D) High when the decoder's stream is active13.  |
+| **Output** | Route\_Fb | (A) The 1-based index of the source currently routed to this decoder.  |
+| **Output** | Source\_Id$ | (S) The string ID of the source currently routed to this decoder.  |
+| **Output** | StreamOn\_Fb | (D) High when the decoder's stream is active.  |
 
 ---
 
