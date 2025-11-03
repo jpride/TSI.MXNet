@@ -6,6 +6,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Crestron.SimplSharp;
+using TSI.MXNet;
+using TSI.UtilityClasses;
 
 namespace TcpClientLibrary
 {
@@ -19,7 +21,6 @@ namespace TcpClientLibrary
         private readonly string _ipAddress;
         private readonly int _port;
 
-        // --- NEW: Configurable delays for robustness ---
         private readonly int _dequeueingDelay = 200;
         private readonly int _commandCheckDelay = 50;
         private readonly int _responseCheckInterval = 100;
@@ -31,9 +32,7 @@ namespace TcpClientLibrary
 
         public bool IsConnected { get; private set; }
 
-        /// <summary>
-        /// Initializes the TCP client but does not connect. Call ConnectAsync to start the connection.
-        /// </summary>
+
         public TcpClientAsync(string ipAddress, int port)
         {
             _ipAddress = ipAddress;
@@ -41,9 +40,6 @@ namespace TcpClientLibrary
             _commandQueue = new ConcurrentQueue<string>();
         }
 
-        /// <summary>
-        /// Initiates connection and starts all background tasks for sending, receiving, and monitoring.
-        /// </summary>
         public void Initialize()
         {
             _cancellationTokenSource = new CancellationTokenSource();
@@ -51,9 +47,6 @@ namespace TcpClientLibrary
             Task.Run(ManageConnectionAsync, _cancellationTokenSource.Token);
         }
 
-        /// <summary>
-        /// Central method to manage the connection lifecycle, including initial connection and reconnection.
-        /// </summary>
         private async Task ManageConnectionAsync()
         {
             while (!_cancellationTokenSource.Token.IsCancellationRequested)
@@ -66,14 +59,15 @@ namespace TcpClientLibrary
 
                 try
                 {
-                    CrestronConsole.PrintLine($"Attempting to connect to {_ipAddress}:{_port}...");
+                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1, $"Attempting to connect to {_ipAddress}:{_port}...");
                     _client = new TcpClient();
                     await _client.ConnectAsync(_ipAddress, _port);
                     _stream = _client.GetStream();
 
                     IsConnected = true;
                     OnConnectionStatusChanged(true);
-                    CrestronConsole.PrintLine("Connection successful.");
+                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1, $"Connection successful.");
+
 
                     // Start the tasks for this connection instance
                     var sendTask = StartSendingCommandsAsync();
@@ -164,7 +158,7 @@ namespace TcpClientLibrary
                         else
                         {
                             // A zero-byte read indicates a graceful shutdown by the remote host.
-                            CrestronConsole.PrintLine("Remote host closed the connection.");
+                            DebugUtility.DebugPrint(CBox.Instance.Debug == 1, "Remote host closed the connection.");
                             break; // Exit loop to trigger reconnection
                         }
                     }
@@ -187,9 +181,6 @@ namespace TcpClientLibrary
             }
         }
 
-        /// <summary>
-        /// Monitors the socket to detect if it has been closed remotely without notice.
-        /// </summary>
         private async Task MonitorConnectionAsync()
         {
             while (IsConnected && !_cancellationTokenSource.Token.IsCancellationRequested)
@@ -200,7 +191,7 @@ namespace TcpClientLibrary
                     // will throw an exception if the connection is closed.
                     if (_client.Client.Poll(1, SelectMode.SelectRead) && _client.Client.Available == 0)
                     {
-                        CrestronConsole.PrintLine("Connection monitor detected a dead socket.");
+                        DebugUtility.DebugPrint(CBox.Instance.Debug == 1, "Connection monitor detected a dead socket.");
                         break; // Exit to trigger reconnection.
                     }
                     await Task.Delay(_connectionMonitorInterval);
@@ -213,9 +204,6 @@ namespace TcpClientLibrary
             }
         }
 
-        /// <summary>
-        /// Handles the cleanup process upon disconnection.
-        /// </summary>
         private Task HandleDisconnectionAsync()
         {
             if (!IsConnected) return Task.CompletedTask; // Already handled
@@ -229,7 +217,7 @@ namespace TcpClientLibrary
             _stream = null;
             _client = null;
 
-            CrestronConsole.PrintLine("Connection lost. Will attempt to reconnect.");
+            DebugUtility.DebugPrint(CBox.Instance.Debug == 1, "Connection lost. Will attempt to reconnect.");
             return Task.CompletedTask;
         }
 
@@ -243,9 +231,6 @@ namespace TcpClientLibrary
             ConnectionStatusChanged?.Invoke(this, status);
         }
 
-        /// <summary>
-        /// Gracefully disconnects and stops all operations.
-        /// </summary>
         public void Disconnect()
         {
             if (_cancellationTokenSource != null)

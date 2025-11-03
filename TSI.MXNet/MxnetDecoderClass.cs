@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Diagnostics;
 using Crestron.SimplSharp;
+using TSI.UtilityClasses;
 
 
 namespace TSI.MXNet
@@ -34,7 +36,6 @@ namespace TSI.MXNet
             CBox.Instance.DeviceListUpdateEvent += CBox_DeviceListUpdateEvent;
 
             Initialized?.Invoke(this, EventArgs.Empty);
-            //CrestronConsole.PrintLine($"Decoder {_myDecoderId} Initialized");
 
         }
 
@@ -52,8 +53,8 @@ namespace TSI.MXNet
                 }
                 else //if sourceindex is 0 perhaps send videopathdisable?)
                 {
-                    CrestronConsole.PrintLine($"MxnetEncoders count: {CBox.Instance.mxnetEncoders.Count}");
-                    CrestronConsole.PrintLine($"Invalid source index: {sourceIndex}");
+                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1, $"MxnetEncoders count: {CBox.Instance.mxnetEncoders.Count}");
+                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1, $"Invalid source index: {sourceIndex}");
                 }
             }
             catch (Exception e)
@@ -103,6 +104,7 @@ namespace TSI.MXNet
             // Unsubscribe from the CBox events to prevent memory leaks
             CBox.Instance.RouteEvent -= CBox_RouteEvent;
             CBox.Instance.ResponseErrorEvent -= CBox_ResponseErrorEvent;
+            CBox.Instance.DeviceListUpdateEvent -= CBox_DeviceListUpdateEvent;
         }
 
         //Event handlers

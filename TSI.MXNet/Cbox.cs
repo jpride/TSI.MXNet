@@ -44,6 +44,7 @@ namespace TSI.MXNet
 
         public ushort Debug
         {
+            get { return _debug ? (ushort)1 : (ushort)0; }
             set 
             {
                 _debug = value == 1;
