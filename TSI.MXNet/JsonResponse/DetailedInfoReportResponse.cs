@@ -2,7 +2,7 @@
 
 namespace TSI.MXNet
 {
- 
+
     public class DetailedInfoReportResponse : BaseResponse
     {
         [JsonProperty("source")]
@@ -15,7 +15,7 @@ namespace TSI.MXNet
         public string Id { get; set; }
 
         [JsonProperty("mac")]
-        public string Mac {  get; set; }
+        public string Mac { get; set; }
     }
 
 }

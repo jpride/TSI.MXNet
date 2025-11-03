@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Independentsoft.Exchange;
 using Newtonsoft.Json;
 using TcpClientLibrary;
 using TSI.UtilityClasses;
@@ -27,6 +28,7 @@ namespace TSI.MXNet
         public event EventHandler<DeviceListUpdateEventArgs> DeviceListUpdateEvent;
         public event EventHandler<SimpleResponseEventArgs> SimpleResponseEvent;
         public event EventHandler<RouteEventArgs> RouteEvent;
+        public event EventHandler<DecoderInfoUpdateEventArgs> DecoderInfoUpdateEvent;
         public event EventHandler<ConnectionStatusEventArgs> ConnectionStatusEvent;
         public event EventHandler InitializationCompleteEvent;
 
@@ -51,8 +53,6 @@ namespace TSI.MXNet
                 DebugUtility.DebugPrint(_debug, $"Debug is {_debug}");
             }
         }
-
-
 
         public CBox()
         {
@@ -96,22 +96,6 @@ namespace TSI.MXNet
                 DebugUtility.DebugPrint(_debug, $"Error in InitializeClient - {ex.Message}");
                 DebugUtility.DebugPrint(_debug, $"Error in InitializeClient - {ex.StackTrace}");
             }
-        }
-
-        private void Client_ConnectionChange(object sender, bool e)
-        {
-            ConnectionStatusEventArgs args = new ConnectionStatusEventArgs
-            {
-                IsConnected = e ? (ushort)1 : (ushort)0
-            };
-
-            ConnectionStatusEvent?.Invoke(this, args);
-        }
-
-        private void Client_ResponseReceived(object sender, string response)
-        {
-            DebugUtility.DebugPrint(_debug, $"Received: " + response);
-            SplitResponse(response);
         }
 
         public void QueueCommand(string cmd)
@@ -174,7 +158,8 @@ namespace TSI.MXNet
                                     id = device.Id,
                                     ip = device.Ip,
                                     mac = device.Mac,
-                                    modelname = device.Modelname,
+                                    modelname = device.Modelname,   
+                                    streamOn = device.Stream == "on" ? (ushort)1 : (ushort)0,
                                 };
                                 mxnetDecoders.Add(d);
                             }
@@ -196,17 +181,19 @@ namespace TSI.MXNet
 
                         //*******Maybe add an event that sends the Decoder List to the MxnetDecoderClass (internally) (...think about why)*******
 
-
+                        //These foreach loops are to populate the string arrays for the event args that go to simpl+ in the Cbox module
                         List<string> _encIdStrings = new List<string>();
                         foreach (MxnetEncoder e in mxnetEncoders)
                         {
                             _encIdStrings.Add(e.id);
                         }
-
+                        
                         List<string> _decIdStrings = new List<string>();
                         foreach (MxnetDecoder d in mxnetDecoders)
                         {   
                             _decIdStrings.Add(d.id);
+                            DecoderInfoUpdateEvent?.Invoke(this, new DecoderInfoUpdateEventArgs { Decoder = d });
+
                         }
 
                         args.encoders = _encIdStrings.ToArray();
@@ -236,6 +223,7 @@ namespace TSI.MXNet
                     {
                         ParseRouteResponse(simpleResponse.Cmd);
                     }
+
                 }
 
                 else if (baseResponse is ErrorResponse errorRsp)
@@ -272,7 +260,7 @@ namespace TSI.MXNet
             }
             catch (JsonSerializationException jse)
             {
-                DebugUtility.DebugPrint(_debug, $"Cannot Deserialize JSON Object. Error: {jse.Message}");
+                DebugUtility.DebugPrint(_debug, $"Cannot Deserialize JSON Object. {jse.Message}");
             }
             catch (Exception ex)
             {
@@ -436,7 +424,7 @@ namespace TSI.MXNet
             QueueCommand(cmd);
         }
 
-        public void SendRs232Command(string decoderId, string rs232cmd, ushort HexorAscii)
+        public void SendRs232Command(string decoderId, string rs232cmd, string HexorAscii)
         {
             try
             {
@@ -447,6 +435,22 @@ namespace TSI.MXNet
             {
                 DebugUtility.DebugPrint(_debug, $"Error in SendRs232Command: {ex.Message}");
             }
+        }
+
+        private void Client_ConnectionChange(object sender, bool e)
+        {
+            ConnectionStatusEventArgs args = new ConnectionStatusEventArgs
+            {
+                IsConnected = e ? (ushort)1 : (ushort)0
+            };
+
+            ConnectionStatusEvent?.Invoke(this, args);
+        }
+
+        private void Client_ResponseReceived(object sender, string response)
+        {
+            DebugUtility.DebugPrint(_debug, $"Received: " + response);
+            SplitResponse(response);
         }
     }
 

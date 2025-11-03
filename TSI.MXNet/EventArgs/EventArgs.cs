@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 
 
 namespace TSI.MXNet
@@ -37,12 +38,24 @@ namespace TSI.MXNet
         public string[] encoders { get; set; }
     }
 
+    public class DecoderInfoUpdateEventArgs : EventArgs
+    {
+        public MxnetDecoder Decoder { get; set; }
+    }
+
     public class RouteEventArgs : EventArgs
     {
         public string DecoderId { get; set; }
         public ushort DestIndex { get; set; }
         public ushort SourceIndex { get; set; }
         public string SourceId { get; set; }
+        public ushort StreamOn { get; set; }
+
+    }
+
+    public class StreamStatusEventArgs : EventArgs
+    {
+        public string DecoderId { get; set; }
         public ushort StreamOn { get; set; }
 
     }

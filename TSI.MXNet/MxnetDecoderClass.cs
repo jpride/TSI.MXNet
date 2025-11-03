@@ -11,6 +11,7 @@ namespace TSI.MXNet
         //Events
         public event EventHandler<RouteEventArgs> CurrentRouteChanged;
         public event EventHandler<ResponseErrorEventArgs> ErrorReceived;
+        public event EventHandler<RouteEventArgs> DeviceInfoUpdate;
         public event EventHandler Initialized;
 
         //props and vars
@@ -33,10 +34,25 @@ namespace TSI.MXNet
 
             CBox.Instance.RouteEvent += CBox_RouteEvent;
             CBox.Instance.ResponseErrorEvent += CBox_ResponseErrorEvent;
-            CBox.Instance.DeviceListUpdateEvent += CBox_DeviceListUpdateEvent;
+            CBox.Instance.DecoderInfoUpdateEvent += CBox_DecoderUpdateEvent;
 
             Initialized?.Invoke(this, EventArgs.Empty);
 
+        }
+
+        private void CBox_DecoderUpdateEvent(object sender, DecoderInfoUpdateEventArgs e)
+        {
+            if (e.Decoder.id == _myDecoderId)
+            {
+                RouteEventArgs rArgs = new RouteEventArgs
+                {
+                    SourceId = e.Decoder.streamSource,
+                    SourceIndex = (ushort)CBox.Instance.mxnetEncoders.FindIndex(x => x.id == e.Decoder.streamSource),
+                    StreamOn = e.Decoder.streamOn
+                };
+
+                DeviceInfoUpdate?.Invoke(this, rArgs);
+            }
         }
 
         public void RequestVideoRoute(string switchType, ushort sourceIndex)
@@ -75,7 +91,7 @@ namespace TSI.MXNet
             }
         }
 
-        public void RequestRs232CommandSend(string command, ushort HexOrAscii)
+        public void RequestRs232CommandSend(string command, string HexOrAscii)
         {
             try
             {
@@ -104,18 +120,11 @@ namespace TSI.MXNet
             // Unsubscribe from the CBox events to prevent memory leaks
             CBox.Instance.RouteEvent -= CBox_RouteEvent;
             CBox.Instance.ResponseErrorEvent -= CBox_ResponseErrorEvent;
-            CBox.Instance.DeviceListUpdateEvent -= CBox_DeviceListUpdateEvent;
+            //CBox.Instance.DeviceListUpdateEvent -= CBox_DeviceListUpdateEvent;
+            CBox.Instance.DecoderInfoUpdateEvent -= CBox_DecoderUpdateEvent;
         }
 
         //Event handlers
-        private void CBox_DeviceListUpdateEvent(object sender, DeviceListUpdateEventArgs args)
-        {
-            int myDecIndex = Array.IndexOf(args.decoders, _myDecoderId);
-            if (myDecIndex != -1)
-            {
-                //do something?
-            }
-        }
 
         private void CBox_RouteEvent(object sender, RouteEventArgs args)
         {
@@ -139,7 +148,5 @@ namespace TSI.MXNet
                 ErrorReceived?.Invoke(this, args);
             }
         }
-
-
     }
 }

@@ -6,12 +6,14 @@
         public string id { get; set; }
         public string mac { get; set; }
         public string modelname { get; set; }
+
     }
 
     public class MxnetDecoder : MxnetDeviceBase
     {
         public string streamSource { get; set; }
-    }
+        public ushort streamOn { get; set; }
+}
 
     public class MxnetEncoder : MxnetDeviceBase
     {
