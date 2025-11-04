@@ -53,13 +53,6 @@ namespace TSI.MXNet
 
     }
 
-    public class StreamStatusEventArgs : EventArgs
-    {
-        public string DecoderId { get; set; }
-        public ushort StreamOn { get; set; }
-
-    }
-
     public class ConnectionStatusEventArgs : EventArgs
     {
         public ushort IsConnected { get; set; }
