@@ -150,7 +150,7 @@ namespace TSI.MXNet
                             string deviceId = kvp.Key;
                             Device device = kvp.Value;
 
-                            if (device.Modelname == "AC-MXNET-1G-R" | device.Modelname == "AC-MXNET-1G-D")
+                            if (device.Modelname == "AC-MXNET-1G-R" | device.Modelname == "AC-MXNET-1G-D" | device.Modelname == "ACT-1G-D")
                             {
                                 MxnetDecoder d = new MxnetDecoder
                                 {
