@@ -163,7 +163,7 @@ namespace TSI.MXNet
                                 };
                                 mxnetDecoders.Add(d);
                             }
-                            else if (device.Modelname == "AC-MXNET-1G-T" | device.Modelname == "IP-1G-WP-T" | device.Modelname.Contains("EV2")) //AC-MXNET-1G-EV2-C, AC-MXNET-1G-EV2WP-B, AC-MXNET-1G-EV2WP-W
+                            else if (device.Modelname.Contains("1G-T") | device.Modelname.Contains("IP-1G-WP-T") | device.Modelname.Contains("EV2")) //AC-MXNET-1G-T, AC-MXNET-1G-EV2-C, AC-MXNET-1G-EV2WP-B, AC-MXNET-1G-EV2WP-W
                             {
                                 MxnetEncoder e = new MxnetEncoder
                                 {
