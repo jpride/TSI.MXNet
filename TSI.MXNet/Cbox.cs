@@ -99,6 +99,12 @@ namespace TSI.MXNet
 
         public void QueueCommand(string cmd)
         {
+            if (_asyncClient == null)
+            {
+                DebugUtility.DebugPrint(_debug, "TcpClientAsync is not initialized. Call InitializeClient() first.");
+                return;
+            }
+
             _asyncClient.QueueCommand(cmd);
         }
 
