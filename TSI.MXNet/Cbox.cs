@@ -150,8 +150,9 @@ namespace TSI.MXNet
                             string deviceId = kvp.Key;
                             Device device = kvp.Value;
 
-                            if (device.Modelname == "AC-MXNET-1G-R" | device.Modelname == "AC-MXNET-1G-D" | device.Modelname == "ACT-1G-D")
-                            {
+
+                            if (device.Modelname.Contains("1G-R") | device.Modelname.Contains("1G-D") | device.Modelname.Contains("DV2"))//AC-MXNET-1G-R, AC-MXNET-1G-D, ACT-1G-D, AC-MXNET-1G-DV2-C
+                                {
                                 MxnetDecoder d = new MxnetDecoder
                                 {
                                     id = device.Id,
@@ -162,7 +163,7 @@ namespace TSI.MXNet
                                 };
                                 mxnetDecoders.Add(d);
                             }
-                            else if (device.Modelname == "AC-MXNET-1G-T" | device.Modelname == "IP-1G-WP-T")
+                            else if (device.Modelname == "AC-MXNET-1G-T" | device.Modelname == "IP-1G-WP-T" | device.Modelname.Contains("EV2")) //AC-MXNET-1G-EV2-C, AC-MXNET-1G-EV2WP-B, AC-MXNET-1G-EV2WP-W
                             {
                                 MxnetEncoder e = new MxnetEncoder
                                 {
