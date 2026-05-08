@@ -1,60 +1,82 @@
-﻿using System;
+using System;
 using Crestron.SimplSharp;
 using TSI.UtilityClasses;
-
 
 namespace TSI.MXNet
 {
     public class MxnetDecoderClass
     {
-        //Events
+        // ─── Events ───────────────────────────────────────────────────────────────
+
+        /// <summary>Fired when a confirmed route change arrives from the panel.</summary>
         public event EventHandler<RouteEventArgs> CurrentRouteChanged;
+
+        /// <summary>Fired when an error response references this decoder's ID.</summary>
         public event EventHandler<ResponseErrorEventArgs> ErrorReceived;
+
+        /// <summary>
+        /// Fired during device-list initialization with the decoder's initial
+        /// stream source and stream-on state.
+        /// </summary>
         public event EventHandler<RouteEventArgs> DeviceInfoUpdate;
+
+        /// <summary>
+        /// Fired at the end of Initialize() to confirm subscription is complete.
+        /// </summary>
         public event EventHandler Initialized;
 
-        //props and vars
+        // ─── Properties ───────────────────────────────────────────────────────────
+
+        /// <summary>0-based index into CBox.mxnetEncoders of the current source.</summary>
         public ushort CurrentSourceIndex { get; private set; }
+
         public string CurrentSourceId { get; private set; }
-        public ushort IsStreamOn { get; private set; }
-        public string LastError { get; private set; }
-        public string LastErrorCmd { get; private set; }
-        private string _myDecoderId; 
+        public ushort IsStreamOn      { get; private set; }
+        public string LastError       { get; private set; }
+        public string LastErrorCmd    { get; private set; }
 
-        //methods
-        public MxnetDecoderClass()
-        {
+        private string _myDecoderId;
 
-        }
+        // ─── Constructor ──────────────────────────────────────────────────────────
 
+        public MxnetDecoderClass() { }
+
+        // ─── Initialization ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Call this from SIMPL+ in response to CBox.InitializationCompleteEvent —
+        /// not before, because mxnetDecoders/mxnetEncoders won't be populated yet.
+        /// </summary>
         public void Initialize(string decoderId)
         {
             _myDecoderId = decoderId;
 
-            CBox.Instance.RouteEvent += CBox_RouteEvent;
-            CBox.Instance.ResponseErrorEvent += CBox_ResponseErrorEvent;
+            CBox.Instance.RouteEvent            += CBox_RouteEvent;
+            CBox.Instance.ResponseErrorEvent    += CBox_ResponseErrorEvent;
             CBox.Instance.DecoderInfoUpdateEvent += CBox_DecoderUpdateEvent;
 
             Initialized?.Invoke(this, EventArgs.Empty);
-
         }
 
+        // ─── Public command methods ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Request a video route. sourceIndex is 1-based (matches SIMPL+ analog).
+        /// Passing 0 is treated as "no valid source" and logs a warning.
+        /// </summary>
         public void RequestVideoRoute(string switchType, ushort sourceIndex)
         {
             try
             {
-                // Get the source ID from CBox's public list
-                if (sourceIndex > 0 && sourceIndex <= CBox.Instance.mxnetEncoders.Count)
+                if (sourceIndex >= 1 && sourceIndex <= CBox.Instance.mxnetEncoders.Count)
                 {
                     string sourceId = CBox.Instance.mxnetEncoders[sourceIndex - 1].id;
-
-                    // Call the CBox singleton to send the command
                     CBox.Instance.Switch(switchType, sourceId, _myDecoderId);
                 }
-                else //if sourceindex is 0 perhaps send videopathdisable?)
+                else
                 {
-                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1, $"MxnetEncoders count: {CBox.Instance.mxnetEncoders.Count}");
-                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1, $"Invalid source index: {sourceIndex}");
+                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1,
+                        $"RequestVideoRoute: invalid sourceIndex {sourceIndex} (encoders={CBox.Instance.mxnetEncoders.Count})");
                 }
             }
             catch (Exception e)
@@ -75,11 +97,11 @@ namespace TSI.MXNet
             }
         }
 
-        public void RequestRs232CommandSend(string command, string HexOrAscii)
+        public void RequestRs232CommandSend(string command, string hexOrAscii)
         {
             try
             {
-                CBox.Instance.SendRs232Command(_myDecoderId, command, HexOrAscii);
+                CBox.Instance.SendRs232Command(_myDecoderId, command, hexOrAscii);
             }
             catch (Exception e)
             {
@@ -87,65 +109,73 @@ namespace TSI.MXNet
             }
         }
 
-        public void RequestStreamStatusChange(ushort OnOrOff)
+        public void RequestStreamStatusChange(ushort onOrOff)
         {
             try
             {
-                CBox.Instance.SetStreamStatus(_myDecoderId, OnOrOff);
+                CBox.Instance.SetStreamStatus(_myDecoderId, onOrOff);
             }
             catch (Exception e)
             {
-                CrestronConsole.PrintLine($"Error in RequestStreamOn: {e.Message}");
+                CrestronConsole.PrintLine($"Error in RequestStreamStatusChange: {e.Message}");
             }
         }
+
+        // ─── Teardown ─────────────────────────────────────────────────────────────
 
         public void Dispose()
         {
-            // Unsubscribe from the CBox events to prevent memory leaks
-            CBox.Instance.RouteEvent -= CBox_RouteEvent;
-            CBox.Instance.ResponseErrorEvent -= CBox_ResponseErrorEvent;
-            //CBox.Instance.DeviceListUpdateEvent -= CBox_DeviceListUpdateEvent;
+            CBox.Instance.RouteEvent             -= CBox_RouteEvent;
+            CBox.Instance.ResponseErrorEvent     -= CBox_ResponseErrorEvent;
             CBox.Instance.DecoderInfoUpdateEvent -= CBox_DecoderUpdateEvent;
         }
 
-        //Event handlers
+        // ─── CBox event handlers ──────────────────────────────────────────────────
 
         private void CBox_RouteEvent(object sender, RouteEventArgs args)
         {
-            if (args.DecoderId == _myDecoderId)
-            {
-                CurrentSourceIndex = args.SourceIndex;
-                CurrentSourceId = args.SourceId;
-                IsStreamOn = args.StreamOn;
+            if (args.DecoderId != _myDecoderId) return;
 
-                CurrentRouteChanged?.Invoke(this, args);
-            }
+            CurrentSourceIndex = args.SourceIndex;
+            CurrentSourceId    = args.SourceId;
+            IsStreamOn         = args.StreamOn;
+
+            CurrentRouteChanged?.Invoke(this, args);
         }
 
         private void CBox_ResponseErrorEvent(object sender, ResponseErrorEventArgs args)
         {
-            if (args.Cmd.Contains(_myDecoderId))
-            {
-                LastError = args.Error;
-                LastErrorCmd = args.Cmd;
+            if (!args.Cmd.Contains(_myDecoderId)) return;
 
-                ErrorReceived?.Invoke(this, args);
-            }
+            LastError    = args.Error;
+            LastErrorCmd = args.Cmd;
+
+            ErrorReceived?.Invoke(this, args);
         }
 
         private void CBox_DecoderUpdateEvent(object sender, DecoderInfoUpdateEventArgs e)
         {
-            if (e.Decoder.id == _myDecoderId)
-            {
-                RouteEventArgs rArgs = new RouteEventArgs
-                {
-                    SourceId = e.Decoder.streamSource,
-                    SourceIndex = (ushort)CBox.Instance.mxnetEncoders.FindIndex(x => x.id == e.Decoder.streamSource),
-                    StreamOn = e.Decoder.streamOn
-                };
+            if (e.Decoder.id != _myDecoderId) return;
 
-                DeviceInfoUpdate?.Invoke(this, rArgs);
+            // FindIndex returns -1 when the encoder is not found (e.g. the decoder
+            // has no stream source assigned yet). Casting -1 to ushort gives 65535,
+            // which would appear as a wild analog value in SIMPL+. Guard it explicitly.
+            int encIndex = CBox.Instance.mxnetEncoders.FindIndex(x => x.id == e.Decoder.streamSource);
+
+            RouteEventArgs rArgs = new RouteEventArgs
+            {
+                SourceId    = e.Decoder.streamSource,
+                SourceIndex = encIndex >= 0 ? (ushort)encIndex : (ushort)0,
+                StreamOn    = e.Decoder.streamOn
+            };
+
+            if (encIndex < 0)
+            {
+                DebugUtility.DebugPrint(CBox.Instance.Debug == 1,
+                    $"CBox_DecoderUpdateEvent: encoder '{e.Decoder.streamSource}' not found for decoder '{_myDecoderId}'. SourceIndex defaulted to 0.");
             }
+
+            DeviceInfoUpdate?.Invoke(this, rArgs);
         }
     }
 }

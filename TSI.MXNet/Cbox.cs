@@ -1,35 +1,54 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using TcpClientLibrary;
 using TSI.UtilityClasses;
 
-
 namespace TSI.MXNet
 {
     public sealed class CBox
     {
+        // ─── Singleton ────────────────────────────────────────────────────────────
 
         private static CBox _instance;
-        public static CBox Instance {get { return _instance; }}
+        private static readonly object _instanceLock = new object();
 
-        private bool _debug;
-        private TcpClientAsync _asyncClient;
-        private string _ipaddress;
-        private ushort _port;
+        public static CBox Instance { get { return _instance; } }
 
-        public List<MxnetDecoder> mxnetDecoders { get; private set;}
+        // ─── Private fields ───────────────────────────────────────────────────────
+
+        private bool            _debug;
+        private TcpClientAsync  _asyncClient;
+        private string          _ipaddress;
+        private ushort          _port;
+
+        // ─── Public device lists ──────────────────────────────────────────────────
+
+        public List<MxnetDecoder> mxnetDecoders { get; private set; }
         public List<MxnetEncoder> mxnetEncoders { get; private set; }
 
-        public event EventHandler<ResponseErrorEventArgs> ResponseErrorEvent;
-        public event EventHandler<rs232ResponseEventArgs> Rs232ResponseEvent;
+        // ─── Events ───────────────────────────────────────────────────────────────
+
+        public event EventHandler<ResponseErrorEventArgs>    ResponseErrorEvent;
+        public event EventHandler<Rs232ResponseEventArgs>    Rs232ResponseEvent;
         public event EventHandler<DeviceListUpdateEventArgs> DeviceListUpdateEvent;
-        public event EventHandler<SimpleResponseEventArgs> SimpleResponseEvent;
-        public event EventHandler<RouteEventArgs> RouteEvent;
+        public event EventHandler<SimpleResponseEventArgs>   SimpleResponseEvent;
+        public event EventHandler<RouteEventArgs>            RouteEvent;
         public event EventHandler<DecoderInfoUpdateEventArgs> DecoderInfoUpdateEvent;
         public event EventHandler<ConnectionStatusEventArgs> ConnectionStatusEvent;
+
+        /// <summary>
+        /// Fired after the device list response has been fully parsed and both
+        /// mxnetEncoders and mxnetDecoders are populated and sorted.
+        /// This is the correct point for SIMPL+ to call MxnetDecoderClass.Initialize()
+        /// and MxnetEncoderClass.Initialize() — device IDs are valid at this point.
+        /// Previously this fired at the start of InitializeClient() before any TCP
+        /// connection existed, which was semantically wrong (Phase 4 / Option B fix).
+        /// </summary>
         public event EventHandler InitializationCompleteEvent;
+
+        // ─── Properties ───────────────────────────────────────────────────────────
 
         public string IPAddress
         {
@@ -46,56 +65,68 @@ namespace TSI.MXNet
         public ushort Debug
         {
             get { return _debug ? (ushort)1 : (ushort)0; }
-            set 
+            set
             {
                 _debug = value == 1;
                 DebugUtility.DebugPrint(_debug, $"Debug is {_debug}");
             }
         }
 
+        // ─── Constructor ──────────────────────────────────────────────────────────
+
         public CBox()
         {
-            if (_instance == null)
-            {                 
-                _instance = this;
-            }
-            else
+            // Thread-safe singleton guard. On a multi-core CP4/RMC3, two near-simultaneous
+            // program starts could otherwise race through the null check.
+            lock (_instanceLock)
             {
-                throw new Exception("CBox is a singleton class and has already been instantiated.");
+                if (_instance != null)
+                    throw new Exception("CBox is a singleton and has already been instantiated.");
+
+                _instance = this;
             }
 
             mxnetDecoders = new List<MxnetDecoder>();
             mxnetEncoders = new List<MxnetEncoder>();
         }
 
+        // ─── Initialization ───────────────────────────────────────────────────────
+
         public void InitializeClient()
         {
             try
             {
-                if (_asyncClient != null) //clean up previous client if exists
-                { 
-                    _asyncClient.ResponseReceived -= Client_ResponseReceived;
+                // Clean up any previous client instance
+                if (_asyncClient != null)
+                {
+                    _asyncClient.ResponseReceived      -= Client_ResponseReceived;
                     _asyncClient.ConnectionStatusChanged -= Client_ConnectionChange;
-
                     _asyncClient.Dispose();
                     _asyncClient = null;
                 }
 
-                _asyncClient = new TcpClientAsync(IPAddress, Port);
-                _asyncClient.ResponseReceived += Client_ResponseReceived;
+                // Inject the debug delegate so TcpClientAsync never needs to touch CBox.
+                // The lambda captures _debug by reference to the field, so runtime
+                // changes to CBox.Debug are immediately reflected in TCP logging.
+                _asyncClient = new TcpClientAsync(IPAddress, Port, () => _debug);
+                _asyncClient.ResponseReceived       += Client_ResponseReceived;
                 _asyncClient.ConnectionStatusChanged += Client_ConnectionChange;
                 _asyncClient.Initialize();
 
+                // Queue the devicelist request. It will be sent once TCP connects.
+                // InitializationCompleteEvent is NOT fired here — it fires later in
+                // ParseResponse() once the device list response comes back and both
+                // encoder/decoder lists are fully populated.
                 QueueCommand("config get devicelist\n");
-
-                InitializationCompleteEvent?.Invoke(this, new EventArgs());
             }
             catch (Exception ex)
             {
-                DebugUtility.DebugPrint(_debug, $"Error in InitializeClient - {ex.Message}");
-                DebugUtility.DebugPrint(_debug, $"Error in InitializeClient - {ex.StackTrace}");
+                DebugUtility.DebugPrint(_debug, $"Error in InitializeClient: {ex.Message}");
+                DebugUtility.DebugPrint(_debug, $"Error in InitializeClient: {ex.StackTrace}");
             }
         }
+
+        // ─── Command queuing ──────────────────────────────────────────────────────
 
         public void QueueCommand(string cmd)
         {
@@ -108,29 +139,26 @@ namespace TSI.MXNet
             _asyncClient.QueueCommand(cmd);
         }
 
+        // ─── Response parsing ─────────────────────────────────────────────────────
+
         public void SplitResponse(string response)
         {
-
             string[] rspArray = response.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
             try
             {
                 foreach (string s in rspArray)
-                {
                     ParseResponse(s);
-                }
             }
             catch (Exception e)
             {
-                DebugUtility.DebugPrint(_debug, $"Exception in SplitResponse: {e.Message}\n");
-                DebugUtility.DebugPrint(_debug, $"{e.StackTrace}\n");
+                DebugUtility.DebugPrint(_debug, $"Exception in SplitResponse: {e.Message}");
+                DebugUtility.DebugPrint(_debug, $"{e.StackTrace}");
             }
-
         }
 
         public void ParseResponse(string response)
         {
-
             try
             {
                 JsonSerializerSettings settings = new JsonSerializerSettings
@@ -141,118 +169,139 @@ namespace TSI.MXNet
 
                 BaseResponse baseResponse = JsonConvert.DeserializeObject<BaseResponse>(response, settings);
 
+                // ── DeviceListResponse ────────────────────────────────────────────
                 if (baseResponse is DeviceListResponse detailedResponse)
                 {
                     if (detailedResponse.Info != null && detailedResponse.Info.Any())
                     {
-                        DeviceListUpdateEventArgs args = new DeviceListUpdateEventArgs();                        
-
-
                         mxnetDecoders.Clear();
                         mxnetEncoders.Clear();
 
                         foreach (var kvp in detailedResponse.Info)
                         {
-                            string deviceId = kvp.Key;
                             Device device = kvp.Value;
 
-
-                            if (device.Modelname.Contains("1G-R") | device.Modelname.Contains("1G-D") | device.Modelname.Contains("DV2"))//AC-MXNET-1G-R, AC-MXNET-1G-D, ACT-1G-D, AC-MXNET-1G-DV2-C
-                                {
-                                MxnetDecoder d = new MxnetDecoder
-                                {
-                                    id = device.Id,
-                                    ip = device.Ip,
-                                    mac = device.Mac,
-                                    modelname = device.Modelname,   
-                                    streamOn = device.Stream == "on" ? (ushort)1 : (ushort)0,
-                                };
-                                mxnetDecoders.Add(d);
-                            }
-                            else if (device.Modelname.Contains("1G-T") | device.Modelname.Contains("IP-1G-WP-T") | device.Modelname.Contains("EV2")) //AC-MXNET-1G-T, AC-MXNET-1G-EV2-C, AC-MXNET-1G-EV2WP-B, AC-MXNET-1G-EV2WP-W
+                            // Guard against devices that come back with no model name
+                            if (string.IsNullOrEmpty(device.Modelname))
                             {
-                                MxnetEncoder e = new MxnetEncoder
+                                DebugUtility.DebugPrint(_debug, $"Device {kvp.Key} has no Modelname — skipped.");
+                                continue;
+                            }
+
+                            // Use || (logical OR) — short-circuit evaluation, null-safe after
+                            // the guard above. Bitwise | was here before; it works on bool but
+                            // suppresses short-circuit and is non-idiomatic.
+                            if (device.Modelname.Contains("1G-R") ||
+                                device.Modelname.Contains("1G-D") ||
+                                device.Modelname.Contains("DV2"))   // AC-MXNET-1G-R, AC-MXNET-1G-D, ACT-1G-D, AC-MXNET-1G-DV2-C
+                            {
+                                mxnetDecoders.Add(new MxnetDecoder
                                 {
-                                    id = device.Id,
-                                    ip = device.Ip,
-                                    mac = device.Mac,
+                                    id        = device.Id,
+                                    ip        = device.Ip,
+                                    mac       = device.Mac,
+                                    modelname = device.Modelname,
+                                    streamOn  = device.Stream == "on" ? (ushort)1 : (ushort)0
+                                });
+                            }
+                            else if (device.Modelname.Contains("1G-T")       ||
+                                     device.Modelname.Contains("IP-1G-WP-T") ||
+                                     device.Modelname.Contains("EV2"))        // AC-MXNET-1G-T, AC-MXNET-1G-EV2-C, AC-MXNET-1G-EV2WP-B/W
+                            {
+                                mxnetEncoders.Add(new MxnetEncoder
+                                {
+                                    id        = device.Id,
+                                    ip        = device.Ip,
+                                    mac       = device.Mac,
                                     modelname = device.Modelname
-                                };
-                                mxnetEncoders.Add(e);
+                                });
                             }
                         }
 
-                        mxnetDecoders = mxnetDecoders.OrderBy(d => d.id).ToList(); //Devices must be named with "01Decoder, 02 Decoder..."
-                        mxnetEncoders = mxnetEncoders.OrderBy(d => d.id).ToList();
+                        // Sort both lists — devices must be named "01-Decoder", "02-Decoder", etc.
+                        mxnetDecoders = mxnetDecoders.OrderBy(d => d.id).ToList();
+                        mxnetEncoders = mxnetEncoders.OrderBy(e => e.id).ToList();
 
-                        //*******Maybe add an event that sends the Decoder List to the MxnetDecoderClass (internally) (...think about why)*******
+                        // Build the ID string arrays for SIMPL+ event args
+                        List<string> encIdStrings = new List<string>();
+                        foreach (MxnetEncoder enc in mxnetEncoders)
+                            encIdStrings.Add(enc.id);
 
-                        //These foreach loops are to populate the string arrays for the event args that go to simpl+ in the Cbox module
-                        List<string> _encIdStrings = new List<string>();
-                        foreach (MxnetEncoder e in mxnetEncoders)
+                        List<string> decIdStrings = new List<string>();
+                        foreach (MxnetDecoder dec in mxnetDecoders)
                         {
-                            _encIdStrings.Add(e.id);
-                        }
-                        
-                        List<string> _decIdStrings = new List<string>();
-                        foreach (MxnetDecoder d in mxnetDecoders)
-                        {   
-                            _decIdStrings.Add(d.id);
-                            DecoderInfoUpdateEvent?.Invoke(this, new DecoderInfoUpdateEventArgs { Decoder = d });
-
+                            decIdStrings.Add(dec.id);
+                            // Fire per-decoder info update so MxnetDecoderClass instances
+                            // can capture their initial stream state. Both lists are fully
+                            // populated and sorted before any of these events fire.
+                            DecoderInfoUpdateEvent?.Invoke(this, new DecoderInfoUpdateEventArgs { Decoder = dec });
                         }
 
-                        args.encoders = _encIdStrings.ToArray();
-                        args.decoders = _decIdStrings.ToArray();
-
-                        args.encoderCount = (ushort)_encIdStrings.Count;
-                        args.decoderCount = (ushort)_decIdStrings.Count;
+                        DeviceListUpdateEventArgs args = new DeviceListUpdateEventArgs
+                        {
+                            Encoders     = encIdStrings.ToArray(),
+                            Decoders     = decIdStrings.ToArray(),
+                            EncoderCount = (ushort)encIdStrings.Count,
+                            DecoderCount = (ushort)decIdStrings.Count
+                        };
 
                         DeviceListUpdateEvent?.Invoke(this, args);
+
+                        // ── Option B: fire InitializationCompleteEvent here, not in
+                        // InitializeClient(). At this point the encoder and decoder lists
+                        // are valid. The SIMPL+ wrapper should call MxnetDecoderClass.Initialize()
+                        // and MxnetEncoderClass.Initialize() in response to this event, not
+                        // before it. ────────────────────────────────────────────────────
+                        DebugUtility.DebugPrint(_debug, $"Initialization complete. {mxnetEncoders.Count} encoders, {mxnetDecoders.Count} decoders.");
+                        InitializationCompleteEvent?.Invoke(this, EventArgs.Empty);
                     }
                 }
 
+                // ── SimpleInfoResponse ────────────────────────────────────────────
                 else if (baseResponse is SimpleInfoResponse simpleResponse)
                 {
                     SimpleResponseEventArgs args = new SimpleResponseEventArgs
                     {
-                        cmd = simpleResponse.Cmd,
-                        info = simpleResponse.Info,
-                        code = (ushort)simpleResponse.Code
+                        Cmd  = simpleResponse.Cmd,
+                        Info = simpleResponse.Info,
+                        Code = simpleResponse.Code.HasValue ? (ushort)simpleResponse.Code.Value : (ushort)0
                     };
 
                     SimpleResponseEvent?.Invoke(this, args);
 
-                    //DebugUtility.DebugPrint(_debug, $"SimpleResponse Cmd: {simpleResponse.Cmd}");
-
-                    if ((simpleResponse.Cmd.Contains("matrix aset") || simpleResponse.Cmd.Contains("config set device videopathdisable")))
+                    // Route and stream-state responses all flow through ParseRouteResponse.
+                    // The call-site guard was extended to include stream on/off so those
+                    // branches inside ParseRouteResponse are no longer dead code.
+                    if (simpleResponse.Cmd.Contains("matrix aset")                      ||
+                        simpleResponse.Cmd.Contains("config set device videopathdisable") ||
+                        simpleResponse.Cmd.Contains("device stream"))
                     {
                         ParseRouteResponse(simpleResponse.Cmd);
                     }
-
                 }
 
+                // ── ErrorResponse ─────────────────────────────────────────────────
                 else if (baseResponse is ErrorResponse errorRsp)
                 {
                     ResponseErrorEventArgs args = new ResponseErrorEventArgs
                     {
                         Error = errorRsp.Error,
-                        Cmd = errorRsp.Cmd,
-                        Code = (ushort)errorRsp.Code
+                        Cmd   = errorRsp.Cmd,
+                        Code  = errorRsp.Code.HasValue ? (ushort)errorRsp.Code.Value : (ushort)0
                     };
 
                     ResponseErrorEvent?.Invoke(this, args);
                 }
 
+                // ── DetailedInfoReportResponse ────────────────────────────────────
                 else if (baseResponse is DetailedInfoReportResponse reportRsp)
                 {
                     SimpleResponseEventArgs args = new SimpleResponseEventArgs
                     {
-                        cmd = reportRsp.Cmd,
-                        info = reportRsp.Info,
-                        code = (ushort)reportRsp.Code,
-                        id = reportRsp.Id,
-
+                        Cmd  = reportRsp.Cmd,
+                        Info = reportRsp.Info,
+                        Code = reportRsp.Code.HasValue ? (ushort)reportRsp.Code.Value : (ushort)0,
+                        Id   = reportRsp.Id
                     };
 
                     SimpleResponseEvent?.Invoke(this, args);
@@ -260,19 +309,17 @@ namespace TSI.MXNet
 
                 else
                 {
-                    DebugUtility.DebugPrint(_debug, "Response not matched to monitored pattern");
+                    DebugUtility.DebugPrint(_debug, "Response not matched to any monitored pattern.");
                 }
-
             }
             catch (JsonSerializationException jse)
             {
-                DebugUtility.DebugPrint(_debug, $"Cannot Deserialize JSON Object. {jse.Message}");
+                DebugUtility.DebugPrint(_debug, $"Cannot deserialize JSON: {jse.Message}");
             }
             catch (Exception ex)
             {
                 DebugUtility.DebugPrint(_debug, $"Error in ParseResponse: {ex.Message}");
             }
-
         }
 
         public void ParseRouteResponse(string rsp)
@@ -281,92 +328,95 @@ namespace TSI.MXNet
             {
                 if (rsp.Contains("matrix aset"))
                 {
-                    string[] rspCmd = rsp.Split(' ');
-                    string enc = rspCmd[3];
-                    string dec = rspCmd[4];
+                    // Format: "matrix aset :<type> <encId> <decId>"
+                    string[] parts = rsp.Split(' ');
+                    string enc = parts[3];
+                    string dec = parts[4];
 
-                    int decIndex;
-                    int encIndex;
+                    int decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
+                    int encIndex = mxnetEncoders.FindIndex(x => x.id == enc);
 
-
-                    decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
-                    encIndex = mxnetEncoders.FindIndex(x => x.id == enc);
-                    
                     if (decIndex != -1 && encIndex != -1)
                     {
                         mxnetDecoders[decIndex].streamSource = mxnetEncoders[encIndex].id;
 
-                        RouteEventArgs args = new RouteEventArgs
+                        RouteEvent?.Invoke(this, new RouteEventArgs
                         {
-                            DecoderId = mxnetDecoders[decIndex].id,
-                            DestIndex = (ushort)(decIndex),
-                            SourceIndex = (ushort)(encIndex),
-                            StreamOn = 1,
-                            SourceId = mxnetEncoders[encIndex].id
-                        };
-
-                        RouteEvent?.Invoke(this, args);
+                            DecoderId   = mxnetDecoders[decIndex].id,
+                            DestIndex   = (ushort)decIndex,
+                            SourceIndex = (ushort)encIndex,
+                            StreamOn    = 1,
+                            SourceId    = mxnetEncoders[encIndex].id
+                        });
+                    }
+                    else
+                    {
+                        DebugUtility.DebugPrint(_debug, $"ParseRouteResponse: could not match enc '{enc}' or dec '{dec}' in lists.");
                     }
                 }
 
                 else if (rsp.Contains("config set device videopathdisable"))
                 {
-                    string[] rspCmd = rsp.Split(' ');
-                    string dec = rspCmd[4];
+                    // Format: "config set device videopathdisable <decId>"
+                    string[] parts = rsp.Split(' ');
+                    string dec = parts[4];
 
                     int decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
 
                     if (decIndex != -1)
                     {
-                        RouteEventArgs args = new RouteEventArgs
-                        {
-                            DecoderId = dec,
-                            DestIndex = (ushort)(decIndex),
-                            SourceIndex = 0,
-                            StreamOn = 1,
-                            SourceId = ""
-                        };
+                        mxnetDecoders[decIndex].streamSource = string.Empty;
 
-                        RouteEvent?.Invoke(this, args);
+                        RouteEvent?.Invoke(this, new RouteEventArgs
+                        {
+                            DecoderId   = dec,
+                            DestIndex   = (ushort)decIndex,
+                            SourceIndex = 0,
+                            StreamOn    = 1,
+                            SourceId    = string.Empty
+                        });
                     }
                 }
+
                 else if (rsp.Contains("device stream off"))
                 {
-                    string[] rspCmd = rsp.Split(' ');
-                    string dec = rspCmd[5];
+                    // Format: "config set device stream off <decId>"
+                    string[] parts = rsp.Split(' ');
+                    string dec = parts[5];
 
                     int decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
 
                     if (decIndex != -1)
                     {
-                        RouteEventArgs args = new RouteEventArgs
+                        mxnetDecoders[decIndex].streamOn = 0;
+
+                        RouteEvent?.Invoke(this, new RouteEventArgs
                         {
                             DecoderId = dec,
                             DestIndex = (ushort)decIndex,
-                            StreamOn = 0
-                        };
-
-                        RouteEvent?.Invoke(this, args);
+                            StreamOn  = 0
+                        });
                     }
-
                 }
+
                 else if (rsp.Contains("device stream on"))
                 {
-                    string[] rspCmd = rsp.Split(' ');
-                    string dec = rspCmd[5];
+                    // Format: "config set device stream on <decId>"
+                    string[] parts = rsp.Split(' ');
+                    string dec = parts[5];
 
                     int decIndex = mxnetDecoders.FindIndex(x => x.id == dec);
 
                     if (decIndex != -1)
                     {
-                        RouteEventArgs args = new RouteEventArgs
+                        mxnetDecoders[decIndex].streamOn = 1;
+
+                        RouteEvent?.Invoke(this, new RouteEventArgs
                         {
                             DecoderId = dec,
                             DestIndex = (ushort)decIndex,
-                            StreamOn = 1
-                        };
-
-                        RouteEvent?.Invoke(this, args);
+                            StreamOn  = 1
+                        });
                     }
                 }
             }
@@ -374,67 +424,88 @@ namespace TSI.MXNet
             {
                 DebugUtility.DebugPrint(_debug, $"Error in ParseRouteResponse: {e.Message}");
             }
-
         }
-        
-        public void Switch(string type, ushort sourceIndex, ushort destIndex) //zero based
+
+        // ─── Routing commands ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Routes a source encoder to a destination decoder by 1-based index.
+        /// Indices are 1-based to match SIMPL+ analog signal conventions.
+        /// Valid range: 1 .. Count (inclusive).
+        /// </summary>
+        public void Switch(string type, ushort sourceIndex, ushort destIndex)
         {
             try
             {
-                if ((sourceIndex <= mxnetEncoders.Count) && (destIndex <= mxnetDecoders.Count))
+                // sourceIndex and destIndex are 1-based. Valid range: 1..Count.
+                if (sourceIndex >= 1 && sourceIndex <= mxnetEncoders.Count &&
+                    destIndex   >= 1 && destIndex   <= mxnetDecoders.Count)
                 {
                     string cmd = $"matrix aset :{type} {mxnetEncoders[sourceIndex - 1].id} {mxnetDecoders[destIndex - 1].id}\n";
                     QueueCommand(cmd);
                 }
+                else
+                {
+                    DebugUtility.DebugPrint(_debug, $"Switch: index out of range (src={sourceIndex}, dst={destIndex}, encoders={mxnetEncoders.Count}, decoders={mxnetDecoders.Count})");
+                }
             }
             catch (Exception ex)
             {
-                DebugUtility.DebugPrint(_debug, $"Error in Switch (Ushort): {ex.Message}");
+                DebugUtility.DebugPrint(_debug, $"Error in Switch: {ex.Message}");
             }
-
         }
 
+        /// <summary>
+        /// Routes a source encoder to a destination decoder by device ID strings.
+        /// </summary>
         public void Switch(string type, string sourceID, string destID)
         {
             string cmd = $"matrix aset :{type} {sourceID} {destID}\n";
             QueueCommand(cmd);
         }
 
+        // ─── Video path disable ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Disables the video path on a decoder by 1-based index.
+        /// </summary>
         public void VideoPathDisable(ushort destIndex)
         {
-            if (destIndex <= mxnetDecoders.Count)
+            // destIndex is 1-based
+            if (destIndex >= 1 && destIndex <= mxnetDecoders.Count)
             {
                 string cmd = $"config set device videopathdisable {mxnetDecoders[destIndex - 1].id}\n";
                 QueueCommand(cmd);
             }
+            else
+            {
+                DebugUtility.DebugPrint(_debug, $"VideoPathDisable: index {destIndex} out of range (decoders={mxnetDecoders.Count})");
+            }
         }
 
+        /// <summary>
+        /// Disables the video path on a decoder by device ID string.
+        /// </summary>
         public void VideoPathDisable(string decoderId)
         {
-            try
-            {
-                string cmd = $"config set device videopathdisable {decoderId}\n";
-                QueueCommand(cmd);
-            }
-            catch (Exception)
-            {
-
-                throw;
-            }
+            string cmd = $"config set device videopathdisable {decoderId}\n";
+            QueueCommand(cmd);
         }
+
+        // ─── Stream state / RS-232 commands ──────────────────────────────────────
 
         public void SetStreamStatus(string decoderID, ushort s)
         {
             string state = s == 1 ? "on" : "off";
-            string cmd = $"config set device stream {state} {decoderID}";
+            string cmd   = $"config set device stream {state} {decoderID}\n";
             QueueCommand(cmd);
         }
 
-        public void SendRs232Command(string decoderId, string rs232cmd, string HexorAscii)
+        public void SendRs232Command(string decoderId, string rs232cmd, string hexOrAscii)
         {
             try
             {
-                string cmd = $"config set device rs232 {HexorAscii} {rs232cmd} {decoderId}\n";
+                string cmd = $"config set device rs232 {hexOrAscii} {rs232cmd} {decoderId}\n";
                 QueueCommand(cmd);
             }
             catch (Exception ex)
@@ -443,22 +514,20 @@ namespace TSI.MXNet
             }
         }
 
+        // ─── TCP client event handlers ────────────────────────────────────────────
+
         private void Client_ConnectionChange(object sender, bool e)
         {
-            ConnectionStatusEventArgs args = new ConnectionStatusEventArgs
+            ConnectionStatusEvent?.Invoke(this, new ConnectionStatusEventArgs
             {
                 IsConnected = e ? (ushort)1 : (ushort)0
-            };
-
-            ConnectionStatusEvent?.Invoke(this, args);
+            });
         }
 
         private void Client_ResponseReceived(object sender, string response)
         {
-            DebugUtility.DebugPrint(_debug, $"Received: " + response);
+            DebugUtility.DebugPrint(_debug, $"Received: {response}");
             SplitResponse(response);
         }
     }
-
-
 }

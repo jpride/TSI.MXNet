@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Sockets;
@@ -6,44 +6,67 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Crestron.SimplSharp;
-using TSI.MXNet;
 using TSI.UtilityClasses;
+
+// NOTE: TSI.MXNet is intentionally NOT referenced here.
+// TcpClientAsync is a general-purpose TCP utility. It must not reach into
+// application-layer singletons (CBox). Debug state is injected via a delegate.
 
 namespace TcpClientLibrary
 {
     public class TcpClientAsync : IDisposable
     {
-        private TcpClient _client;
-        private NetworkStream _stream;
+        // ─── Private fields ───────────────────────────────────────────────────────
+
+        private TcpClient         _client;
+        private NetworkStream     _stream;
         private readonly ConcurrentQueue<string> _commandQueue;
         private CancellationTokenSource _cancellationTokenSource;
 
-        private readonly string _ipAddress;
-        private readonly int _port;
+        private readonly string   _ipAddress;
+        private readonly int      _port;
 
-        private readonly int _dequeueingDelay = 200;
-        private readonly int _commandCheckDelay = 50;
-        private readonly int _responseCheckInterval = 100;
-        private readonly int _reconnectInterval = 5000; // Attempt to reconnect every 5 seconds
-        private readonly int _connectionMonitorInterval = 3000; // Check connection status every 3 seconds
+        // Injected debug flag — evaluated at call time so CBox.Debug changes
+        // at runtime are reflected without re-constructing the client.
+        private readonly Func<bool> _debugEnabled;
+
+        private readonly int _dequeueingDelay         = 200;
+        private readonly int _commandCheckDelay        = 50;
+        private readonly int _responseCheckInterval    = 100;
+        private readonly int _reconnectInterval        = 5000;
+        private readonly int _connectionMonitorInterval = 3000;
+
+        // ─── Public surface ───────────────────────────────────────────────────────
 
         public event EventHandler<string> ResponseReceived;
-        public event EventHandler<bool> ConnectionStatusChanged;
+        public event EventHandler<bool>   ConnectionStatusChanged;
 
         public bool IsConnected { get; private set; }
 
+        // ─── Construction ─────────────────────────────────────────────────────────
 
-        public TcpClientAsync(string ipAddress, int port)
+        /// <summary>
+        /// </summary>
+        /// <param name="ipAddress">Target device IP.</param>
+        /// <param name="port">Target device TCP port.</param>
+        /// <param name="debugEnabled">
+        ///     Delegate evaluated each time a debug print is needed.
+        ///     Pass <c>() => false</c> to disable. Typically wired to CBox._debug
+        ///     via a lambda so runtime Debug toggle is reflected immediately.
+        /// </param>
+        public TcpClientAsync(string ipAddress, int port, Func<bool> debugEnabled = null)
         {
-            _ipAddress = ipAddress;
-            _port = port;
+            _ipAddress    = ipAddress;
+            _port         = port;
+            _debugEnabled = debugEnabled ?? (() => false); // safe default: debug off
             _commandQueue = new ConcurrentQueue<string>();
         }
+
+        // ─── Lifecycle ────────────────────────────────────────────────────────────
 
         public void Initialize()
         {
             _cancellationTokenSource = new CancellationTokenSource();
-            // Start the connection and reconnection loop in the background.
             Task.Run(ManageConnectionAsync, _cancellationTokenSource.Token);
         }
 
@@ -59,24 +82,25 @@ namespace TcpClientLibrary
 
                 try
                 {
-                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1, $"Attempting to connect to {_ipAddress}:{_port}...");
+                    DebugUtility.DebugPrint(_debugEnabled(), $"Attempting to connect to {_ipAddress}:{_port}...");
+
                     _client = new TcpClient();
                     await _client.ConnectAsync(_ipAddress, _port);
                     _stream = _client.GetStream();
 
                     IsConnected = true;
                     OnConnectionStatusChanged(true);
-                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1, $"Connection successful.");
 
+                    DebugUtility.DebugPrint(_debugEnabled(), "Connection successful.");
 
-                    // Start the tasks for this connection instance
-                    var sendTask = StartSendingCommandsAsync();
+                    // All three tasks run concurrently for this connection lifetime.
+                    // The first one to exit (disconnect / error) causes WhenAny to return,
+                    // which falls through to the finally block for cleanup + reconnect.
+                    var sendTask    = StartSendingCommandsAsync();
                     var receiveTask = StartReceivingResponsesAsync();
                     var monitorTask = MonitorConnectionAsync();
 
-                    // Wait for any of the tasks to complete (which indicates a disconnection)
                     await Task.WhenAny(sendTask, receiveTask, monitorTask);
-
                 }
                 catch (Exception ex)
                 {
@@ -85,20 +109,28 @@ namespace TcpClientLibrary
                 }
                 finally
                 {
-                    // If we are here, it means a disconnection occurred.
                     await HandleDisconnectionAsync();
-                    await Task.Delay(_reconnectInterval, _cancellationTokenSource.Token);
+
+                    // Swallow OperationCanceledException so the cancellation path
+                    // exits cleanly without throwing up through the task.
+                    try
+                    {
+                        await Task.Delay(_reconnectInterval, _cancellationTokenSource.Token);
+                    }
+                    catch (OperationCanceledException) { }
                 }
             }
         }
 
+        // ─── Command queuing ──────────────────────────────────────────────────────
+
         public void QueueCommand(string command)
         {
             if (!string.IsNullOrEmpty(command))
-            {
                 _commandQueue.Enqueue(command);
-            }
         }
+
+        // ─── Private async loops ──────────────────────────────────────────────────
 
         private async Task StartSendingCommandsAsync()
         {
@@ -108,10 +140,9 @@ namespace TcpClientLibrary
                 {
                     if (_commandQueue.TryDequeue(out string command))
                     {
+                        // Ensure consistent line termination
                         if (!(command.EndsWith("\r\n") || command.EndsWith("\n") || command.EndsWith("\r")))
-                        {
-                            command += "\r\n"; // Standard terminator
-                        }
+                            command += "\r\n";
 
                         byte[] data = Encoding.UTF8.GetBytes(command);
                         await _stream.WriteAsync(data, 0, data.Length, _cancellationTokenSource.Token);
@@ -124,18 +155,18 @@ namespace TcpClientLibrary
                 }
                 catch (IOException ioEx)
                 {
-                    CrestronConsole.PrintLine($"Error in Send loop (likely disconnect): {ioEx.Message}");
-                    break; // Exit loop to trigger reconnection
+                    CrestronConsole.PrintLine($"Send loop error (likely disconnect): {ioEx.Message}");
+                    break;
                 }
                 catch (ObjectDisposedException)
                 {
-                    CrestronConsole.PrintLine("Send loop stopped: Client has been disposed.");
-                    break; // Exit loop
+                    CrestronConsole.PrintLine("Send loop stopped: client disposed.");
+                    break;
                 }
                 catch (Exception e)
                 {
-                    CrestronConsole.PrintLine($"Error in StartSendingCommands: {e.Message}");
-                    // Depending on the error, you might want to break here as well.
+                    CrestronConsole.PrintLine($"Send loop unexpected error: {e.Message}");
+                    // Non-fatal: log and continue unless it recurs
                 }
             }
         }
@@ -143,6 +174,7 @@ namespace TcpClientLibrary
         private async Task StartReceivingResponsesAsync()
         {
             var buffer = new byte[65535];
+
             while (IsConnected && !_cancellationTokenSource.Token.IsCancellationRequested)
             {
                 try
@@ -150,6 +182,7 @@ namespace TcpClientLibrary
                     if (_stream.DataAvailable)
                     {
                         int bytesRead = await _stream.ReadAsync(buffer, 0, buffer.Length, _cancellationTokenSource.Token);
+
                         if (bytesRead > 0)
                         {
                             string response = Encoding.UTF8.GetString(buffer, 0, bytesRead);
@@ -157,26 +190,27 @@ namespace TcpClientLibrary
                         }
                         else
                         {
-                            // A zero-byte read indicates a graceful shutdown by the remote host.
-                            DebugUtility.DebugPrint(CBox.Instance.Debug == 1, "Remote host closed the connection.");
-                            break; // Exit loop to trigger reconnection
+                            // Zero-byte read = graceful remote shutdown
+                            DebugUtility.DebugPrint(_debugEnabled(), "Remote host closed the connection.");
+                            break;
                         }
                     }
+
                     await Task.Delay(_responseCheckInterval);
                 }
                 catch (IOException ioEx)
                 {
-                    CrestronConsole.PrintLine($"Error in Receive loop (likely disconnect): {ioEx.Message}");
-                    break; // Exit loop to trigger reconnection
+                    CrestronConsole.PrintLine($"Receive loop error (likely disconnect): {ioEx.Message}");
+                    break;
                 }
                 catch (ObjectDisposedException)
                 {
-                    CrestronConsole.PrintLine("Receive loop stopped: Client has been disposed.");
-                    break; // Exit loop
+                    CrestronConsole.PrintLine("Receive loop stopped: client disposed.");
+                    break;
                 }
                 catch (Exception e)
                 {
-                    CrestronConsole.PrintLine($"Error in StartReceivingResponses: {e.Message}");
+                    CrestronConsole.PrintLine($"Receive loop unexpected error: {e.Message}");
                 }
             }
         }
@@ -187,13 +221,14 @@ namespace TcpClientLibrary
             {
                 try
                 {
-                    // This is a common way to check for a dead socket. Sending 0 bytes
-                    // will throw an exception if the connection is closed.
+                    // Poll(1, SelectRead) returns true when data is available OR the socket
+                    // is closed. If Available == 0 alongside that, the socket is dead.
                     if (_client.Client.Poll(1, SelectMode.SelectRead) && _client.Client.Available == 0)
                     {
-                        DebugUtility.DebugPrint(CBox.Instance.Debug == 1, "Connection monitor detected a dead socket.");
-                        break; // Exit to trigger reconnection.
+                        DebugUtility.DebugPrint(_debugEnabled(), "Connection monitor: dead socket detected.");
+                        break;
                     }
+
                     await Task.Delay(_connectionMonitorInterval);
                 }
                 catch (Exception ex)
@@ -204,40 +239,38 @@ namespace TcpClientLibrary
             }
         }
 
+        // ─── Disconnection ────────────────────────────────────────────────────────
+
         private Task HandleDisconnectionAsync()
         {
-            if (!IsConnected) return Task.CompletedTask; // Already handled
+            if (!IsConnected) return Task.CompletedTask;
 
             IsConnected = false;
             OnConnectionStatusChanged(false);
 
             _stream?.Close();
             _client?.Close();
-
             _stream = null;
             _client = null;
 
-            DebugUtility.DebugPrint(CBox.Instance.Debug == 1, "Connection lost. Will attempt to reconnect.");
+            DebugUtility.DebugPrint(_debugEnabled(), "Disconnected. Reconnect will be attempted.");
             return Task.CompletedTask;
         }
 
+        // ─── Event raisers ────────────────────────────────────────────────────────
+
         protected virtual void OnResponseReceived(string response)
-        {
-            ResponseReceived?.Invoke(this, response);
-        }
+            => ResponseReceived?.Invoke(this, response);
 
         protected virtual void OnConnectionStatusChanged(bool status)
-        {
-            ConnectionStatusChanged?.Invoke(this, status);
-        }
+            => ConnectionStatusChanged?.Invoke(this, status);
+
+        // ─── Teardown ─────────────────────────────────────────────────────────────
 
         public void Disconnect()
         {
-            if (_cancellationTokenSource != null)
-            {
-                _cancellationTokenSource.Cancel();
-            }
-            HandleDisconnectionAsync().Wait(); // Ensure cleanup is finished
+            _cancellationTokenSource?.Cancel();
+            HandleDisconnectionAsync().Wait();
         }
 
         public void Dispose()
