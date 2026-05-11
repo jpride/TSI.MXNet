@@ -1,0 +1,355 @@
+/*******************************************************************************************
+  SIMPL+ Module Information
+  (Fill in comments below)
+*******************************************************************************************/
+/*
+Dealer Name:
+System Name:
+System Number:
+Programmer:	jpride
+Comments:
+*/
+
+/*******************************************************************************************
+  Compiler Directives
+*******************************************************************************************/
+// #ENABLE_DYNAMIC
+#SYMBOL_NAME "TSI - MXNet Cbox Processor - IP - v1.0"
+#CATEGORY "46" "#MxNet" 
+#DEFAULT_VOLATILE
+#ENABLE_STACK_CHECKING
+#ENABLE_TRACE
+#OUTPUT_SHIFT	2
+
+#DEFINE_CONSTANT	DECODER_COUNT	64
+#DEFINE_CONSTANT	ENCODER_COUNT	32
+
+
+/*******************************************************************************************
+  Include Libraries
+*******************************************************************************************/
+#INCLUDEPATH "C:\Users\jpride\source\repos\TSI.MXNet\TSI.MXNet\bin\Debug"
+
+#User_SIMPLSHARP_LIBRARY "TSI.MXNet"
+
+/*******************************************************************************************
+  DIGITAL, ANALOG and SERIAL INPUTS and OUTPUTS
+*******************************************************************************************/
+
+DIGITAL_INPUT 	_skip_,
+				_skip_,
+				Debug,
+				InitializeCbox,
+				GetDeviceList,
+				_skip_,
+				DecoderStreamOff[DECODER_COUNT],
+				_skip_;
+
+
+STRING_INPUT	CommandToSend[256],
+				_skip_,
+				cbox_ipaddress$[15];
+ANALOG_INPUT	SwitchDecoder[DECODER_COUNT];
+
+
+            
+STRING_OUTPUT	Info,Cmd,Error;
+DIGITAL_OUTPUT	IsCommunicating, InitializationComplete, ErrorReceived;
+ANALOG_OUTPUT	No_of_Encoders, No_of_Decoders;
+                         
+
+STRING_OUTPUT	EncoderID[ENCODER_COUNT],DecoderID[DECODER_COUNT];
+                  
+ANALOG_OUTPUT	Route_fb[DECODER_COUNT];
+
+             
+/*******************************************************************************************
+  Parameters
+*******************************************************************************************/
+STRING_PARAMETER cb_Ipaddress[15];
+INTEGER_PARAMETER cb_Port;
+
+/*******************************************************************************************
+  Parameter Properties
+*******************************************************************************************/
+
+#BEGIN_PARAMETER_PROPERTIES cb_Ipaddress
+   propValidUnits = unitString;
+   propDefaultUnit = unitString;
+   propShortDescription = "IP Address or Hostname of MXNet cb";
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES cb_Port
+   propValidUnits = unitDecimal;
+   propDefaultUnit = unitDecimal;
+   propDefaultValue = 24d;
+   propShortDescription = "cb Port Number";
+#END_PARAMETER_PROPERTIES
+
+                
+        
+
+
+//Instantiate class  
+CBox cb;
+ 
+string ipa[15];           
+
+
+/*******************************************************************************************
+  Functions
+*******************************************************************************************/
+
+
+function RegisterEvents()
+{
+	RegisterEvent(cb, ResponseErrorEvent, OnResponseErrorEvent);
+	RegisterEvent(cb, Rs232ResponseEvent, OnRs232ResponseEvent);
+	RegisterEvent(cb, SimpleResponseEvent, OnSimpleInfoEvent);
+	RegisterEvent(cb, DeviceListUpdateEvent, onDeviceListUpdateEvent);
+	RegisterEvent(cb, RouteEvent, onRouteEvent);
+	RegisterEvent(cb, ConnectionStatusEvent, OnClientConnectionStatusEvent);
+	RegisterEvent(cb, InitializationCompleteEvent, OnInitializationCompleteEvent);
+}        
+   
+
+integer_function VerifyIPAddress(string ipa)
+{
+	integer d1,d2,d3,i;
+	string octets[4][3];
+        
+	try 
+	{
+		if (len(ipa) > 9)
+		{
+		   	d1 = find(".",ipa); 		
+			d2 = find(".",ipa,d1+1);   
+			d3 = find(".",ipa,d2+1);
+			
+			octets[1] = left(ipa, d1 - 1);
+			octets[2] = mid(ipa, d1 + 1, d2 - d1 - 1);
+			octets[3] = mid(ipa, d2 + 1, d3 - d2 - 1);
+			octets[4] = mid(ipa, d3 + 1, len(ipa) - d3);
+	         
+			if (d1 = 0 || d2 = 0 || d3 = 0)
+			{
+	         return (0);
+			}
+	
+			for (i = 1 to 4)
+			{
+	        	if (atoi(octets[i]) > 254 || atoi(octets[i]) < 0)
+				{
+	            	return (0);
+				}
+			}
+
+			return (1);
+		}	
+		else
+		{
+        	return (0);
+		}		
+	}
+	
+	catch
+	{
+        trace("Error in VerifyIPAddress");
+		return	(0);
+	}
+}
+
+/*******************************************************************************************
+  Events
+*******************************************************************************************/
+Change Debug
+{
+	cb.Debug = Debug;
+}    
+    
+push InitializeCbox
+{
+	InitializationComplete = 0;
+
+	if (VerifyIPAddress(ipa))
+	{
+		cb.IPAddress = ipa;
+		cb.Port = 24;
+
+		cb.InitializeClient();
+	}
+}
+
+push GetDeviceList
+{
+	string cmd[256];
+
+	cmd = "config get devicelist\n";
+	cb.QueueCommand(cmd);
+}
+            
+change CommandToSend
+{
+	cb.QueueCommand(CommandToSend);
+}
+
+change cbox_ipaddress$
+{
+	if (VerifyIPAddress(cbox_ipaddress$))
+		{
+			trace("IP Verified");
+			ipa = cbox_ipaddress$;
+		}	
+}
+
+change SwitchDecoder
+{
+	integer el;
+	el = getlastmodifiedarrayindex();
+                    
+	if (debug) trace("S+ switch: source: %d | dest: %d",SwitchDecoder[el],el);      
+	cb.Switch("av", SwitchDecoder[el], el); //Switch(type, sourceindex, destindex) indices are 1 based
+}
+
+change DecoderStreamOff
+{
+	integer el;
+	el = getlastmodifiedarrayindex();
+    
+	cb.SetStreamStatus(DecoderID[el], !DecoderStreamOff[el]);
+}
+
+        
+eventhandler OnInitializationCompleteEvent(CBox sender, EventArgs args)     
+{
+	string cmd[256];
+
+	InitializationComplete = 1;
+	// Device list is already parsed at this point - do not re-request it.
+}
+
+
+eventhandler OnResponseErrorEvent(CBox sender, ResponseErrorEventArgs args)
+{
+    pulse(100,ErrorReceived);
+         
+	
+	if (Debug) 
+	{
+		trace("Error Recieved");
+		trace("Error: %s",args.Error);
+		trace("Cmd: %s)",args.Cmd);
+
+		GenerateUserNotice("Error Recieved");
+		GenerateUserNotice("Error: %s",args.Error);
+		GenerateUserNotice("Cmd: %s)",args.Cmd);
+	}
+
+
+	Cmd = args.Cmd;
+	Error = args.Error;
+	
+}
+
+eventhandler OnRs232ResponseEvent(CBox sender, rs232ResponseEventArgs args)
+{	
+    if (Debug) 
+	{ 
+		trace("Rs232 Response Recieved for device %s: %s", args.Id, args.Data);
+		GenerateUserNotice("Rs232 Response Recieved for device %s: %s", args.Id, args.Data);
+	}
+}
+
+
+eventhandler OnSimpleInfoEvent(CBox sender, SimpleResponseEventArgs args)
+{	
+    if (Debug) 
+	{
+		trace("General MXNet Response Recieved for device %s: %s\n", args.Id, args.Cmd);
+		GenerateUserNotice("General Response Recieved for device %s: %s\n", args.Id, args.Cmd);
+	}
+
+	Cmd = args.Cmd;
+	Info = args.Info;
+}
+  
+
+eventhandler OnClientConnectionStatusEvent(CBox sender, ConnectionStatusEventArgs args)
+{
+	if (args.IsConnected) 
+	{
+		if (Debug) 
+		{
+	    	trace("Cbox Client Connected");
+			GenerateUserNotice("Cbox Client Connected");
+		}
+
+		IsCommunicating = 1;
+	}
+
+	else
+	{
+		if (Debug) 
+		{
+	        trace("Cbox Client Disconnected");
+			GenerateUserNotice("Cbox Client Disconnected");
+		}
+
+		IsCommunicating = 0;
+	}
+}
+
+eventhandler onDeviceListUpdateEvent(CBox sender, DeviceListUpdateEventArgs args)
+{
+	integer i;
+         
+	
+	for (i = 1 to args.DecoderCount)
+	{
+		DecoderID[i] = args.Decoders[i-1];
+	}
+
+
+	for (i = 1 to args.EncoderCount)
+	{
+		EncoderID[i] = args.Encoders[i-1];
+	}
+     
+	No_of_Encoders = args.EncoderCount;
+	No_of_Decoders = args.DecoderCount;
+	ProcessLogic();
+	//InitializationComplete = 1;
+
+	
+}
+
+eventhandler onRouteEvent(CBox sender, RouteEventArgs args)
+{
+	
+	if (debug) trace("Route Event\n");
+	if (debug) trace("D:%d,S:%d",args.DestIndex, args.SourceIndex);
+	
+	if (args.SourceIndex = 99)
+	{
+		Route_fb[args.DestIndex + 1] = 0;
+	}
+	else
+	{
+		Route_fb[args.DestIndex + 1] = args.SourceIndex + 1;
+	}
+	
+}
+         
+
+function Main()
+{
+    RegisterEvents();
+              
+	InitializationComplete = 0;
+
+	ipa = cb_Ipaddress;
+
+	cb.IPAddress = cb_Ipaddress;
+	cb.Port = cb_Port;  
+	cb.Debug = Debug;   
+}

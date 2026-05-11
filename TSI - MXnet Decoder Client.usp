@@ -1,0 +1,215 @@
+/*******************************************************************************************
+  SIMPL+ Module Information
+  (Fill in comments below)
+*******************************************************************************************/
+/*
+Dealer Name:
+System Name:
+System Number:
+Programmer:	jpride
+Comments:	Decoder module must be used with the CBox module
+*/
+
+/*******************************************************************************************
+  Compiler Directives
+  (Uncomment and declare compiler directives as needed)
+*******************************************************************************************/
+#SYMBOL_NAME "TSI - MXnet Decoder Client"
+#CATEGORY "46" "#MxNet" 
+#DEFAULT_VOLATILE
+#ENABLE_STACK_CHECKING
+#ENABLE_TRACE
+            
+#OUTPUT_SHIFT	1
+
+                  
+
+#Help_Begin
+This module must be used in conjunction with TSI - Mxnet CBox Processor - v1.0.
+
+Tie the DecoderId$ from the processor to the same input on this module. 
+Tie the IsInitialized Digital from the Processor to the Initialize digital on this module. 
+
+
+When using the [rs232]cmd$ serial, preselect your datatype in the HexOrAscii parameter first. Send your desired serial commands in this form:
+(the quotes are not necessary)
+Ascii - 'POWR1   \r'      
+or 
+Hex - '08 22 00 00 00 01 D5' 
+
+#Help_End
+
+/*******************************************************************************************
+  Include Libraries
+*******************************************************************************************/
+#INCLUDEPATH "C:\Users\jpride\source\repos\TSI.MXNet\TSI.MXNet\bin\Debug"
+
+#User_SIMPLSHARP_LIBRARY "TSI.MXNet"
+
+/*******************************************************************************************
+  DIGITAL, ANALOG and SERIAL INPUTS and OUTPUTS
+*******************************************************************************************/
+DIGITAL_INPUT 	_skip_,
+				Initialize,
+				_skip_;
+                     
+DIGITAL_INPUT	StreamOn,
+				StreamOff,
+				_skip_;
+
+ANALOG_INPUT 	route;
+STRING_INPUT	switchType[4],Rs232_HexOrAscii[2];
+DIGITAL_INPUT	videopathdisable,
+				_skip_;
+
+String_Input 	DecoderID[16],Rs232Cmd$[256];
+
+ANALOG_OUTPUT 	Route_Fb;
+STRING_OUTPUT 	Source_Id$;
+
+DIGITAL_OUTPUT	StreamOn_Fb,
+				Initialized;
+
+
+/*******************************************************************************************
+  Global Variables
+*******************************************************************************************/
+MxnetDecoderClass Decoder;
+integer IsInitialized;
+/*******************************************************************************************
+  Functions
+*******************************************************************************************/
+function RegisterEvents()
+{
+	RegisterEvent(Decoder, CurrentRouteChanged, OnCurrentRouteChanged);
+	RegisterEvent(Decoder, ErrorReceived, OnErrorReceived);
+	RegisterEvent(Decoder, Initialized, OnInitialized);
+	RegisterEvent(Decoder, DeviceInfoUpdate, OnDeviceInfoUpdate);
+
+} 
+
+  
+
+/*******************************************************************************************
+  Event Handlers
+*******************************************************************************************/
+push Initialize
+{
+    if (len(DecoderID) > 1)
+    {
+        if (IsInitialized)
+        {
+            Decoder.Dispose();   // clean up subscriptions before re-init
+            IsInitialized = 0;
+            Initialized = 0;
+        }
+
+        Decoder.Initialize(DecoderID);
+    }
+}
+
+threadsafe change route
+{
+	if (IsInitialized)
+	{
+		Decoder.RequestVideoRoute(switchType,route);
+	}
+} 
+
+push videopathdisable
+{
+	If (IsInitialized)
+	{
+		Decoder.RequestVideoPathDisable();
+	}
+}
+
+push StreamOn
+{
+	If (IsInitialized)
+	{
+		Decoder.RequestStreamStatusChange(1);
+		//StreamOn_Fb = 1;
+	}
+}
+
+push StreamOff
+{
+	If (IsInitialized)
+	{
+		Decoder.RequestStreamStatusChange(0);
+		//StreamOn_Fb = 0;
+	}
+}
+     
+
+change Rs232Cmd$
+{
+    If (IsInitialized)
+	{
+		Decoder.RequestRs232CommandSend(Rs232Cmd$, Rs232_HexOrAscii);
+	}
+}
+   
+
+Change DecoderID
+{
+    // DecoderID should be stable after startup. Initialization is
+    // triggered by the Initialize input, not by ID arrival.
+    // Logging here helps catch wiring mistakes during commissioning.
+    if (IsInitialized)
+    {
+        trace("WARNING: DecoderID changed while initialized\n");
+    }
+}
+
+eventhandler OnCurrentRouteChanged(MxnetDecoderClass sender, RouteEventArgs args)
+{
+    if (len(args.SourceId) = 0)
+        Route_Fb = 0;   // 0 = no source / video path disabled
+    else
+        Route_Fb = args.SourceIndex + 1;  // 1-based encoder index
+
+    Source_Id$ = args.SourceId;
+    StreamOn_Fb = args.StreamOn;
+}
+
+eventhandler OnErrorReceived(MxnetDecoderClass sender, ResponseErrorEventArgs args)
+{
+      trace("decoder (%s) received error",DecoderID);
+
+}
+eventhandler OnInitialized(MxnetDecoderClass sender, EventArgs args)
+{
+	IsInitialized = 1;
+	Initialized = IsInitialized;
+}
+          
+
+eventhandler OnDeviceInfoUpdate(MxnetDecoderClass sender, RouteEventArgs args)
+{		
+	//if (debug) trace("OnDeviceInfoUpdate: decoder %s source %s", DecoderID, args.SourceId);
+
+    if (len(args.SourceId) = 0)
+        Route_Fb = 0;   // 0 = no source / video path disabled
+    else
+        Route_Fb = args.SourceIndex + 1;  // 1-based encoder index
+
+    Source_Id$ = args.SourceId;
+    StreamOn_Fb = args.StreamOn;
+}
+
+
+
+/*******************************************************************************************
+  Main()
+*******************************************************************************************/
+
+Function Main()
+{
+	RegisterEvents();
+	IsInitialized = 0;
+    WaitForInitializationComplete();
+}
+
+
