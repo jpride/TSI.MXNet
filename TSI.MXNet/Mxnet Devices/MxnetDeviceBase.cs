@@ -2,22 +2,23 @@
 {
     public class MxnetDeviceBase
     {
-        public string ip { get; set; }
-        public string id { get; set; }
-        public string mac { get; set; }
+        public string ip        { get; set; }
+        public string id        { get; set; }
+        public string mac       { get; set; }
         public string modelname { get; set; }
 
     }
 
     public class MxnetDecoder : MxnetDeviceBase
     {
-        public string streamSource { get; set; }
-        public ushort streamOn { get; set; }
+        public string streamSource  { get; set; }
+        public ushort streamOn      { get; set; }
+        public string chV           { get; set; }
 }
 
     public class MxnetEncoder : MxnetDeviceBase
     {
-    
+        public string ch           { get; set; }
     }
 
 }

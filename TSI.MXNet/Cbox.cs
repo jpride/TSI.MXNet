@@ -188,12 +188,9 @@ namespace TSI.MXNet
                                 continue;
                             }
 
-                            // Use || (logical OR) — short-circuit evaluation, null-safe after
-                            // the guard above. Bitwise | was here before; it works on bool but
-                            // suppresses short-circuit and is non-idiomatic.
                             if (device.Modelname.Contains("1G-R") ||
                                 device.Modelname.Contains("1G-D") ||
-                                device.Modelname.Contains("DV2"))   // AC-MXNET-1G-R, AC-MXNET-1G-D, ACT-1G-D, AC-MXNET-1G-DV2-C
+                                device.Modelname.Contains("DV2"))   
                             {
                                 mxnetDecoders.Add(new MxnetDecoder
                                 {
@@ -201,24 +198,26 @@ namespace TSI.MXNet
                                     ip        = device.Ip,
                                     mac       = device.Mac,
                                     modelname = device.Modelname,
-                                    streamOn  = device.Stream == "on" ? (ushort)1 : (ushort)0
+                                    streamOn  = device.Stream == "on" ? (ushort)1 : (ushort)0,
+                                    chV      = device.ChV ?? string.Empty //chV denotes the current video channel on decoders, used for matching to encoders in the SIMPL+ wrapper
                                 });
                             }
                             else if (device.Modelname.Contains("1G-T")       ||
                                      device.Modelname.Contains("IP-1G-WP-T") ||
-                                     device.Modelname.Contains("EV2"))        // AC-MXNET-1G-T, AC-MXNET-1G-EV2-C, AC-MXNET-1G-EV2WP-B/W
+                                     device.Modelname.Contains("EV2"))        
                             {
                                 mxnetEncoders.Add(new MxnetEncoder
                                 {
                                     id        = device.Id,
                                     ip        = device.Ip,
                                     mac       = device.Mac,
-                                    modelname = device.Modelname
+                                    modelname = device.Modelname,
+                                    ch        = device.Ch ?? string.Empty   //ch denotes the current channel number on encoders, used for matching to decoders in the SIMPL+ wrapper
                                 });
                             }
                         }
 
-                        // Sort both lists — devices must be named "01-Decoder", "02-Decoder", etc.
+                        // Sort both lists — devices must be named "01-Decoder", "02-Decoder", or some other sortable format
                         mxnetDecoders = mxnetDecoders.OrderBy(d => d.id).ToList();
                         mxnetEncoders = mxnetEncoders.OrderBy(e => e.id).ToList();
 
@@ -227,10 +226,15 @@ namespace TSI.MXNet
                         foreach (MxnetEncoder enc in mxnetEncoders)
                             encIdStrings.Add(enc.id);
 
+
                         List<string> decIdStrings = new List<string>();
                         foreach (MxnetDecoder dec in mxnetDecoders)
                         {
                             decIdStrings.Add(dec.id);
+                            MxnetEncoder matchedEncoder = mxnetEncoders.FirstOrDefault(e => !string.IsNullOrEmpty(e.ch) && e.ch == dec.chV); //figure out the current stream encoder by matching the channel numbers
+
+                            dec.streamSource = matchedEncoder != null ? matchedEncoder.id : string.Empty;
+
                             // Fire per-decoder info update so MxnetDecoderClass instances
                             // can capture their initial stream state. Both lists are fully
                             // populated and sorted before any of these events fire.
@@ -247,11 +251,6 @@ namespace TSI.MXNet
 
                         DeviceListUpdateEvent?.Invoke(this, args);
 
-                        // ── Option B: fire InitializationCompleteEvent here, not in
-                        // InitializeClient(). At this point the encoder and decoder lists
-                        // are valid. The SIMPL+ wrapper should call MxnetDecoderClass.Initialize()
-                        // and MxnetEncoderClass.Initialize() in response to this event, not
-                        // before it. ────────────────────────────────────────────────────
                         DebugUtility.DebugPrint(_debug, $"Initialization complete. {mxnetEncoders.Count} encoders, {mxnetDecoders.Count} decoders.");
                         InitializationCompleteEvent?.Invoke(this, EventArgs.Empty);
                     }

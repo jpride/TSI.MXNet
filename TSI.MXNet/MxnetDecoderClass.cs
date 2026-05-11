@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Crestron.SimplSharp;
 using TSI.UtilityClasses;
 
@@ -28,12 +29,12 @@ namespace TSI.MXNet
         // ─── Properties ───────────────────────────────────────────────────────────
 
         /// <summary>0-based index into CBox.mxnetEncoders of the current source.</summary>
-        public ushort CurrentSourceIndex { get; private set; }
+        public ushort CurrentSourceIndex    { get; private set; }
 
-        public string CurrentSourceId { get; private set; }
-        public ushort IsStreamOn      { get; private set; }
-        public string LastError       { get; private set; }
-        public string LastErrorCmd    { get; private set; }
+        public string CurrentSourceId       { get; private set; }
+        public ushort IsStreamOn            { get; private set; }
+        public string LastError             { get; private set; }
+        public string LastErrorCmd          { get; private set; }
 
         private string _myDecoderId;
 
@@ -51,9 +52,27 @@ namespace TSI.MXNet
         {
             _myDecoderId = decoderId;
 
-            CBox.Instance.RouteEvent            += CBox_RouteEvent;
-            CBox.Instance.ResponseErrorEvent    += CBox_ResponseErrorEvent;
+            CBox.Instance.RouteEvent += CBox_RouteEvent;
+            CBox.Instance.ResponseErrorEvent += CBox_ResponseErrorEvent;
             CBox.Instance.DecoderInfoUpdateEvent += CBox_DecoderUpdateEvent;
+
+            // At this point CBox.mxnetDecoders is already populated.
+            // Look up our current state and fire DeviceInfoUpdate immediately
+            // so the SIMPL+ wrapper gets initial Route_Fb and StreamOn_Fb
+            // without needing a second device list request.
+            MxnetDecoder myDecoder = CBox.Instance.mxnetDecoders.FirstOrDefault(d => d.id == _myDecoderId);
+
+            if (myDecoder != null)
+            {
+                int encIndex = CBox.Instance.mxnetEncoders.FindIndex(x => x.id == myDecoder.streamSource);
+
+                DeviceInfoUpdate?.Invoke(this, new RouteEventArgs
+                {
+                    SourceId = myDecoder.streamSource ?? string.Empty,
+                    SourceIndex = encIndex >= 0 ? (ushort)encIndex : (ushort)0,
+                    StreamOn = myDecoder.streamOn
+                });
+            }
 
             Initialized?.Invoke(this, EventArgs.Empty);
         }
@@ -90,6 +109,14 @@ namespace TSI.MXNet
             try
             {
                 CBox.Instance.VideoPathDisable(_myDecoderId);
+                this.CurrentSourceIndex = 0; //added 5-11-26
+                this.CurrentSourceId = String.Empty; //added 5-11-26
+
+                CBox_RouteEvent(this, new RouteEventArgs
+                {
+                    SourceId = String.Empty,
+                    SourceIndex = 0,
+                });
             }
             catch (Exception e)
             {
