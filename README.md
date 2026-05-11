@@ -47,7 +47,7 @@ Follow these steps to integrate the MxNet system into your Crestron program.
    * You can now control routing by sending a 1-based source index to the **route** analog input on a Decoder Client module.  
    * The **Route\_Fb** analog output will provide the 1-based feedback for the currently routed source4.
 
-   * You can also control the stream status (on/off) using the **StreamOn** and **StreamOff** inputs5555. Feedback is provided on **StreamOn\_Fb**6.
+   * You can also control the stream status (on/off) using the **StreamOn** and **StreamOff**. Feedback is provided on **StreamOn\_Fb.
 
 ## **📋 SIMPL+ Module API Reference**
 
