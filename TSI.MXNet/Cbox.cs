@@ -68,7 +68,8 @@ namespace TSI.MXNet
             set
             {
                 _debug = value == 1;
-                DebugUtility.DebugPrint(_debug, $"Debug is {_debug}");
+                DebugUtility.SetDebugState(_debug);
+                DebugUtility.DebugPrint($"Debug is {_debug}", "Cbox", DebugUtility.DebugLevels.NOTICE);
             }
         }
 
@@ -121,8 +122,8 @@ namespace TSI.MXNet
             }
             catch (Exception ex)
             {
-                DebugUtility.DebugPrint(_debug, $"Error in InitializeClient: {ex.Message}");
-                DebugUtility.DebugPrint(_debug, $"Error in InitializeClient: {ex.StackTrace}");
+                DebugUtility.DebugPrint($"Error in InitializeClient: {ex.Message}", "Cbox", DebugUtility.DebugLevels.ERROR);
+                DebugUtility.DebugPrint($"Error in InitializeClient: {ex.StackTrace}", "Cbox", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -132,7 +133,7 @@ namespace TSI.MXNet
         {
             if (_asyncClient == null)
             {
-                DebugUtility.DebugPrint(_debug, "TcpClientAsync is not initialized. Call InitializeClient() first.");
+                DebugUtility.DebugPrint("TcpClientAsync is not initialized. Call InitializeClient() first.", "Cbox", DebugUtility.DebugLevels.ERROR);
                 return;
             }
 
@@ -152,8 +153,8 @@ namespace TSI.MXNet
             }
             catch (Exception e)
             {
-                DebugUtility.DebugPrint(_debug, $"Exception in SplitResponse: {e.Message}");
-                DebugUtility.DebugPrint(_debug, $"{e.StackTrace}");
+                DebugUtility.DebugPrint($"Exception in SplitResponse: {e.Message}", "Cbox", DebugUtility.DebugLevels.ERROR);
+                DebugUtility.DebugPrint($"{e.StackTrace}", "Cbox", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -184,7 +185,7 @@ namespace TSI.MXNet
                             // Guard against devices that come back with no model name
                             if (string.IsNullOrEmpty(device.Modelname))
                             {
-                                DebugUtility.DebugPrint(_debug, $"Device {kvp.Key} has no Modelname — skipped.");
+                                DebugUtility.DebugPrint($"Device {kvp.Key} has no Modelname — skipped.", "Cbox", DebugUtility.DebugLevels.WARN);
                                 continue;
                             }
 
@@ -251,7 +252,7 @@ namespace TSI.MXNet
 
                         DeviceListUpdateEvent?.Invoke(this, args);
 
-                        DebugUtility.DebugPrint(_debug, $"Initialization complete. {mxnetEncoders.Count} encoders, {mxnetDecoders.Count} decoders.");
+                        DebugUtility.DebugPrint($"Initialization complete. {mxnetEncoders.Count} encoders, {mxnetDecoders.Count} decoders.", "Cbox", DebugUtility.DebugLevels.NOTICE);
                         InitializationCompleteEvent?.Invoke(this, EventArgs.Empty);
                     }
                 }
@@ -308,16 +309,16 @@ namespace TSI.MXNet
 
                 else
                 {
-                    DebugUtility.DebugPrint(_debug, "Response not matched to any monitored pattern.");
+                    DebugUtility.DebugPrint("Response not matched to any monitored pattern.", "Cbox", DebugUtility.DebugLevels.WARN);
                 }
             }
             catch (JsonSerializationException jse)
             {
-                DebugUtility.DebugPrint(_debug, $"Cannot deserialize JSON: {jse.Message}");
+                DebugUtility.DebugPrint($"Cannot deserialize JSON: {jse.Message}", "Cbox", DebugUtility.DebugLevels.ERROR);
             }
             catch (Exception ex)
             {
-                DebugUtility.DebugPrint(_debug, $"Error in ParseResponse: {ex.Message}");
+                DebugUtility.DebugPrint($"Error in ParseResponse: {ex.Message}", "Cbox", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -350,7 +351,7 @@ namespace TSI.MXNet
                     }
                     else
                     {
-                        DebugUtility.DebugPrint(_debug, $"ParseRouteResponse: could not match enc '{enc}' or dec '{dec}' in lists.");
+                        DebugUtility.DebugPrint($"ParseRouteResponse: could not match enc '{enc}' or dec '{dec}' in lists.", "Cbox", DebugUtility.DebugLevels.WARN);
                     }
                 }
 
@@ -421,7 +422,7 @@ namespace TSI.MXNet
             }
             catch (Exception e)
             {
-                DebugUtility.DebugPrint(_debug, $"Error in ParseRouteResponse: {e.Message}");
+                DebugUtility.DebugPrint($"Error in ParseRouteResponse: {e.Message}", "Cbox", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -445,12 +446,12 @@ namespace TSI.MXNet
                 }
                 else
                 {
-                    DebugUtility.DebugPrint(_debug, $"Switch: index out of range (src={sourceIndex}, dst={destIndex}, encoders={mxnetEncoders.Count}, decoders={mxnetDecoders.Count})");
+                    DebugUtility.DebugPrint($"Switch: index out of range (src={sourceIndex}, dst={destIndex}, encoders={mxnetEncoders.Count}, decoders={mxnetDecoders.Count})", "Cbox", DebugUtility.DebugLevels.WARN);
                 }
             }
             catch (Exception ex)
             {
-                DebugUtility.DebugPrint(_debug, $"Error in Switch: {ex.Message}");
+                DebugUtility.DebugPrint($"Error in Switch: {ex.Message}", "Cbox", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -478,7 +479,7 @@ namespace TSI.MXNet
             }
             else
             {
-                DebugUtility.DebugPrint(_debug, $"VideoPathDisable: index {destIndex} out of range (decoders={mxnetDecoders.Count})");
+                DebugUtility.DebugPrint($"VideoPathDisable: index {destIndex} out of range (decoders={mxnetDecoders.Count})", "Cbox", DebugUtility.DebugLevels.WARN);
             }
         }
 
@@ -509,7 +510,7 @@ namespace TSI.MXNet
             }
             catch (Exception ex)
             {
-                DebugUtility.DebugPrint(_debug, $"Error in SendRs232Command: {ex.Message}");
+                DebugUtility.DebugPrint($"Error in SendRs232Command: {ex.Message}", "Cbox", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -525,7 +526,7 @@ namespace TSI.MXNet
 
         private void Client_ResponseReceived(object sender, string response)
         {
-            DebugUtility.DebugPrint(_debug, $"Received: {response}");
+            DebugUtility.DebugPrint($"Received: {response}", "Cbox", DebugUtility.DebugLevels.OFF);
             SplitResponse(response);
         }
     }

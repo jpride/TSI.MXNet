@@ -10,16 +10,16 @@ namespace TSI.MXNet
         // ─── Events ───────────────────────────────────────────────────────────────
 
         /// <summary>Fired when a confirmed route change arrives from the panel.</summary>
-        public event EventHandler<RouteEventArgs> CurrentRouteChanged;
+        public event EventHandler<RouteEventArgs>           CurrentRouteChanged;
 
         /// <summary>Fired when an error response references this decoder's ID.</summary>
-        public event EventHandler<ResponseErrorEventArgs> ErrorReceived;
+        public event EventHandler<ResponseErrorEventArgs>   ErrorReceived;
 
         /// <summary>
         /// Fired during device-list initialization with the decoder's initial
         /// stream source and stream-on state.
         /// </summary>
-        public event EventHandler<RouteEventArgs> DeviceInfoUpdate;
+        public event EventHandler<RouteEventArgs>           DeviceInfoUpdate;
 
         /// <summary>
         /// Fired at the end of Initialize() to confirm subscription is complete.
@@ -94,13 +94,13 @@ namespace TSI.MXNet
                 }
                 else
                 {
-                    DebugUtility.DebugPrint(CBox.Instance.Debug == 1,
-                        $"RequestVideoRoute: invalid sourceIndex {sourceIndex} (encoders={CBox.Instance.mxnetEncoders.Count})");
+                    if (CBox.Instance.Debug == 1)
+                        DebugUtility.DebugPrint($"RequestVideoRoute: invalid sourceIndex {sourceIndex} (encoders={CBox.Instance.mxnetEncoders.Count})", "MxnetDecoderClass", DebugUtility.DebugLevels.WARN);
                 }
             }
             catch (Exception e)
             {
-                CrestronConsole.PrintLine($"Error in RequestVideoRoute: {e.Message}");
+                DebugUtility.DebugPrint($"Error in RequestVideoRoute: {e.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -120,7 +120,7 @@ namespace TSI.MXNet
             }
             catch (Exception e)
             {
-                CrestronConsole.PrintLine($"Error in RequestVideoPathDisable: {e.Message}");
+                DebugUtility.DebugPrint($"Error in RequestVideoPathDisable: {e.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -132,7 +132,7 @@ namespace TSI.MXNet
             }
             catch (Exception e)
             {
-                CrestronConsole.PrintLine($"Error in RequestRs232CommandSend: {e.Message}");
+                DebugUtility.DebugPrint($"Error in RequestRs232CommandSend: {e.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -144,7 +144,7 @@ namespace TSI.MXNet
             }
             catch (Exception e)
             {
-                CrestronConsole.PrintLine($"Error in RequestStreamStatusChange: {e.Message}");
+                DebugUtility.DebugPrint($"Error in RequestStreamStatusChange: {e.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -198,8 +198,8 @@ namespace TSI.MXNet
 
             if (encIndex < 0)
             {
-                DebugUtility.DebugPrint(CBox.Instance.Debug == 1,
-                    $"CBox_DecoderUpdateEvent: encoder '{e.Decoder.streamSource}' not found for decoder '{_myDecoderId}'. SourceIndex defaulted to 0.");
+                if (CBox.Instance.Debug == 1)
+                    DebugUtility.DebugPrint($"CBox_DecoderUpdateEvent: encoder '{e.Decoder.streamSource}' not found for decoder '{_myDecoderId}'. SourceIndex defaulted to 0.", "MxnetDecoderClass", DebugUtility.DebugLevels.WARN);
             }
 
             DeviceInfoUpdate?.Invoke(this, rArgs);

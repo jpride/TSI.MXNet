@@ -82,7 +82,7 @@ namespace TcpClientLibrary
 
                 try
                 {
-                    DebugUtility.DebugPrint(_debugEnabled(), $"Attempting to connect to {_ipAddress}:{_port}...");
+                    DebugUtility.DebugPrint($"Attempting to connect to {_ipAddress}:{_port}...", "MxnetDecoderClass", DebugUtility.DebugLevels.WARN);
 
                     _client = new TcpClient();
                     await _client.ConnectAsync(_ipAddress, _port);
@@ -91,7 +91,7 @@ namespace TcpClientLibrary
                     IsConnected = true;
                     OnConnectionStatusChanged(true);
 
-                    DebugUtility.DebugPrint(_debugEnabled(), "Connection successful.");
+                    DebugUtility.DebugPrint("Connection successful.", "MxnetDecoderClass", DebugUtility.DebugLevels.NOTICE);
 
                     // All three tasks run concurrently for this connection lifetime.
                     // The first one to exit (disconnect / error) causes WhenAny to return,
@@ -104,7 +104,7 @@ namespace TcpClientLibrary
                 }
                 catch (Exception ex)
                 {
-                    CrestronConsole.PrintLine($"Connection failed: {ex.Message}");
+                    DebugUtility.DebugPrint($"Connection failed: {ex.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
                     OnConnectionStatusChanged(false);
                 }
                 finally
@@ -155,17 +155,17 @@ namespace TcpClientLibrary
                 }
                 catch (IOException ioEx)
                 {
-                    CrestronConsole.PrintLine($"Send loop error (likely disconnect): {ioEx.Message}");
+                    DebugUtility.DebugPrint($"Send loop error (likely disconnect): {ioEx.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
                     break;
                 }
                 catch (ObjectDisposedException)
                 {
-                    CrestronConsole.PrintLine("Send loop stopped: client disposed.");
+                    DebugUtility.DebugPrint("Send loop stopped: client disposed.", "MxnetDecoderClass", DebugUtility.DebugLevels.WARN);
                     break;
                 }
                 catch (Exception e)
                 {
-                    CrestronConsole.PrintLine($"Send loop unexpected error: {e.Message}");
+                    DebugUtility.DebugPrint($"Send loop unexpected error: {e.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
                     // Non-fatal: log and continue unless it recurs
                 }
             }
@@ -191,7 +191,7 @@ namespace TcpClientLibrary
                         else
                         {
                             // Zero-byte read = graceful remote shutdown
-                            DebugUtility.DebugPrint(_debugEnabled(), "Remote host closed the connection.");
+                            DebugUtility.DebugPrint("Remote host closed the connection.", "MxnetDecoderClass", DebugUtility.DebugLevels.WARN);
                             break;
                         }
                     }
@@ -200,17 +200,17 @@ namespace TcpClientLibrary
                 }
                 catch (IOException ioEx)
                 {
-                    CrestronConsole.PrintLine($"Receive loop error (likely disconnect): {ioEx.Message}");
+                    DebugUtility.DebugPrint($"Receive loop error (likely disconnect): {ioEx.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
                     break;
                 }
                 catch (ObjectDisposedException)
                 {
-                    CrestronConsole.PrintLine("Receive loop stopped: client disposed.");
+                    DebugUtility.DebugPrint("Receive loop stopped: client disposed.", "MxnetDecoderClass", DebugUtility.DebugLevels.WARN);
                     break;
                 }
                 catch (Exception e)
                 {
-                    CrestronConsole.PrintLine($"Receive loop unexpected error: {e.Message}");
+                    DebugUtility.DebugPrint($"Receive loop unexpected error: {e.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
                 }
             }
         }
@@ -225,7 +225,7 @@ namespace TcpClientLibrary
                     // is closed. If Available == 0 alongside that, the socket is dead.
                     if (_client.Client.Poll(1, SelectMode.SelectRead) && _client.Client.Available == 0)
                     {
-                        DebugUtility.DebugPrint(_debugEnabled(), "Connection monitor: dead socket detected.");
+                        DebugUtility.DebugPrint("Connection monitor: dead socket detected.", "MxnetDecoderClass", DebugUtility.DebugLevels.WARN);
                         break;
                     }
 
@@ -233,7 +233,7 @@ namespace TcpClientLibrary
                 }
                 catch (Exception ex)
                 {
-                    CrestronConsole.PrintLine($"Connection monitor error: {ex.Message}");
+                    DebugUtility.DebugPrint($"Connection monitor error: {ex.Message}", "MxnetDecoderClass", DebugUtility.DebugLevels.ERROR);
                     break;
                 }
             }
@@ -253,7 +253,7 @@ namespace TcpClientLibrary
             _stream = null;
             _client = null;
 
-            DebugUtility.DebugPrint(_debugEnabled(), "Disconnected. Reconnect will be attempted.");
+            DebugUtility.DebugPrint("Disconnected. Reconnect will be attempted.", "MxnetDecoderClass", DebugUtility.DebugLevels.WARN);
             return Task.CompletedTask;
         }
 
