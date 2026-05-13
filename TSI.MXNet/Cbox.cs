@@ -69,7 +69,6 @@ namespace TSI.MXNet
             {
                 _debug = value == 1;
                 DebugUtility.SetDebugState(_debug);
-                DebugUtility.DebugPrint($"Debug is {_debug}", "Cbox", DebugUtility.DebugLevels.NOTICE);
             }
         }
 

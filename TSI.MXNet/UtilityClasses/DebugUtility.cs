@@ -68,6 +68,8 @@ namespace TSI.UtilityClasses
 
         public static void SetDebugState(bool state)
         {
+            _debugEnabled = state;
+
             if (state)
             {
                 CrestronConsole.PrintLine($"*******************\n");
