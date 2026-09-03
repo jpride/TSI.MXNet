@@ -96,6 +96,7 @@ namespace TSI.MXNet
         {
             try
             {
+                DebugUtility.InstanceName = "Cbox";
                 // Clean up any previous client instance
                 if (_asyncClient != null)
                 {
@@ -113,7 +114,7 @@ namespace TSI.MXNet
                 _asyncClient.ConnectionStatusChanged += Client_ConnectionChange;
                 _asyncClient.Initialize();
 
-                // Queue the devicelist request. It will be sent once TCP connects.
+                // Queue the devicelist request. It will be sent once TCP connects. 
                 // InitializationCompleteEvent is NOT fired here — it fires later in
                 // ParseResponse() once the device list response comes back and both
                 // encoder/decoder lists are fully populated.
@@ -121,8 +122,8 @@ namespace TSI.MXNet
             }
             catch (Exception ex)
             {
-                DebugUtility.DebugPrint($"Error in InitializeClient: {ex.Message}", "Cbox", DebugUtility.DebugLevels.ERROR);
-                DebugUtility.DebugPrint($"Error in InitializeClient: {ex.StackTrace}", "Cbox", DebugUtility.DebugLevels.ERROR);
+                DebugUtility.DebugPrint($"Error in InitializeClient: {ex.Message}", DebugUtility.DebugLevels.ERROR);
+                DebugUtility.DebugPrint($"Error in InitializeClient: {ex.StackTrace}", DebugUtility.DebugLevels.ERROR);
             }
         }
 
@@ -510,6 +511,31 @@ namespace TSI.MXNet
             catch (Exception ex)
             {
                 DebugUtility.DebugPrint($"Error in SendRs232Command: {ex.Message}", "Cbox", DebugUtility.DebugLevels.ERROR);
+            }
+        }
+
+        // ─── Display Picture Commands ──────────────────────────────────────
+        /// <summary>
+        /// Sends a command to all RX to switch to the preloaded "Force Image" (1-5)
+        /// </summary>
+        /// <param name="pictureId"></param>
+        public void SetDisplayPicture(string pictureId)
+        {
+
+            if (!int.TryParse(pictureId, out int pid) || pid < 0 || pid > 5)
+            {
+                DebugUtility.DebugPrint(_debug, $"SetDisplayPicture: invalid pictureId '{pictureId}' — must be 0–5.");
+                return;
+            }
+
+            try
+            {
+                string cmd = $"config set device displaypicture {pictureId} ALLRX\n";
+                QueueCommand(cmd);
+            }
+            catch (Exception ex)
+            {
+                DebugUtility.DebugPrint(_debug, $"Error in SetDisplayPicture: {ex.Message}");
             }
         }
 
